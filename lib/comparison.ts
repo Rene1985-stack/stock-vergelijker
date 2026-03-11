@@ -4,7 +4,7 @@ import {
   aggregateIncoming,
 } from "./picqer";
 import { getDb } from "./db";
-import { stockCache, warehouseMappings } from "@/db/schema";
+import { warehouseMappings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { neon } from "@neondatabase/serverless";
 import type { WarehouseMapping } from "@/db/schema";
@@ -36,8 +36,6 @@ export interface ComparisonResult {
   exactPageCount: number;
 }
 
-const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-
 export async function getComparison(
   mappingId: number
 ): Promise<ComparisonResult> {
@@ -49,30 +47,6 @@ export async function getComparison(
 
   if (!mapping) {
     throw new Error(`Mapping ${mappingId} not found`);
-  }
-
-  // Check cache
-  const cached = await getDb()
-    .select()
-    .from(stockCache)
-    .where(eq(stockCache.mappingId, mappingId));
-
-  if (cached.length > 0 && cached[0].fetchedAt) {
-    const age = Date.now() - cached[0].fetchedAt.getTime();
-    if (age < CACHE_TTL_MS) {
-      const rows = cached.map(cacheToRow);
-      return {
-        mapping,
-        rows,
-        totalSkus: rows.length,
-        skusWithDifference: rows.filter((r) => r.hasDifference).length,
-        fetchedAt: cached[0].fetchedAt,
-        fromCache: true,
-        exactComplete: true,
-        exactItemCount: 0,
-        exactPageCount: 0,
-      };
-    }
   }
 
   // Read Exact data from exact_stock table (pre-synced via /api/sync-exact)
@@ -96,7 +70,6 @@ export async function getComparison(
     [mappingId]
   );
 
-  // Transform to a usable format
   const exactData = exactRows.map((r) => ({
     ItemCode: r.item_code as string,
     ItemDescription: (r.item_description as string) || "",
@@ -160,7 +133,6 @@ export async function getComparison(
       stockDiff,
       incomingDiff,
       outgoingDiff,
-      // Only stock and incoming diffs count — Exact has no planned outgoing
       hasDifference: stockDiff !== 0 || incomingDiff !== 0,
     });
   }
@@ -174,77 +146,15 @@ export async function getComparison(
     return a.sku.localeCompare(b.sku);
   });
 
-  const fetchedAt = new Date();
-
-  // Save to cache
-  try {
-    await getDb()
-      .delete(stockCache)
-      .where(eq(stockCache.mappingId, mappingId));
-
-    if (rows.length > 0) {
-      const batchSize = 5;
-      for (let i = 0; i < rows.length; i += batchSize) {
-        const batch = rows.slice(i, i + batchSize);
-        await getDb()
-          .insert(stockCache)
-          .values(
-            batch.map((row) => ({
-              mappingId,
-              sku: row.sku,
-              productName: row.productName || null,
-              picqerStock: row.picqerStock,
-              picqerReserved: row.picqerReserved,
-              picqerIncoming: row.picqerIncoming,
-              exactStock: String(row.exactStock),
-              exactPlannedIn: String(row.exactPlannedIn),
-              exactPlannedOut: String(row.exactPlannedOut),
-              fetchedAt,
-            }))
-          );
-      }
-    }
-  } catch (cacheErr) {
-    console.error("[Cache] Failed to save comparison cache:", cacheErr);
-  }
-
   return {
     mapping,
     rows,
     totalSkus: rows.length,
     skusWithDifference: rows.filter((r) => r.hasDifference).length,
-    fetchedAt,
+    fetchedAt: new Date(),
     fromCache: false,
     exactComplete: true,
     exactItemCount: exactData.length,
     exactPageCount: 0,
-  };
-}
-
-function cacheToRow(entry: typeof stockCache.$inferSelect): ComparisonRow {
-  const pStock = entry.picqerStock ?? 0;
-  const pReserved = entry.picqerReserved ?? 0;
-  const pIncoming = entry.picqerIncoming ?? 0;
-  const eStock = Number(entry.exactStock ?? 0);
-  const ePlannedIn = Number(entry.exactPlannedIn ?? 0);
-  const ePlannedOut = Number(entry.exactPlannedOut ?? 0);
-
-  const stockDiff = pStock - eStock;
-  const incomingDiff = pIncoming - ePlannedIn;
-  const outgoingDiff = pReserved - ePlannedOut;
-
-  return {
-    sku: entry.sku,
-    productName: entry.productName || "",
-    picqerStock: pStock,
-    picqerReserved: pReserved,
-    picqerIncoming: pIncoming,
-    exactStock: eStock,
-    exactPlannedIn: ePlannedIn,
-    exactPlannedOut: ePlannedOut,
-    stockDiff,
-    incomingDiff,
-    outgoingDiff,
-    hasDifference: stockDiff !== 0 || incomingDiff !== 0,
   };
 }
