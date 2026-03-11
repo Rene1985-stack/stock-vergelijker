@@ -390,10 +390,11 @@ export async function getItemWarehouses(
 }
 
 export async function getWarehouses(division: number): Promise<ExactWarehouse[]> {
-  return exactFetchAll<ExactWarehouse>(
+  const result = await exactFetchAll<ExactWarehouse>(
     division,
     `/logistics/Warehouses?$select=Code,Description,ID`
   );
+  return result.data;
 }
 
 export async function getCurrentDivision(accessToken: string): Promise<number> {
