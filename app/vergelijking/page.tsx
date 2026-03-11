@@ -86,7 +86,25 @@ function VergelijkingPage() {
 
     fetch(`/api/comparison?mapping_id=${mappingId}`)
       .then(async (res) => {
-        const json = await res.json();
+        const text = await res.text();
+
+        // Handle non-JSON responses (timeouts, server errors return HTML)
+        let json;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          // Vercel returns HTML on timeout/500 — extract useful message
+          if (res.status === 504 || text.includes("FUNCTION_INVOCATION_TIMEOUT")) {
+            throw new Error(
+              "Timeout: het ophalen duurde te lang (>60s). " +
+              "Probeer het opnieuw — de cache wordt geleidelijk opgebouwd."
+            );
+          }
+          throw new Error(
+            `Server error (HTTP ${res.status}). Probeer het later opnieuw.`
+          );
+        }
+
         if (!res.ok) {
           throw new Error(json.error || `Vergelijking mislukt (HTTP ${res.status})`);
         }
