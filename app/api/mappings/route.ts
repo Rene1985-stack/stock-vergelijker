@@ -11,7 +11,8 @@ export async function GET() {
     return NextResponse.json(mappings);
   } catch (error) {
     console.error("Mapping list error:", error);
-    return NextResponse.json({ error: "Failed to fetch mappings" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: `Failed to fetch mappings: ${msg}` }, { status: 500 });
   }
 }
 
