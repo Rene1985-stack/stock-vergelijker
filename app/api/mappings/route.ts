@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { warehouseMappings } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    const mappings = await db.select().from(warehouseMappings);
+    return NextResponse.json(mappings);
+  } catch (error) {
+    console.error("Mapping list error:", error);
+    return NextResponse.json({ error: "Failed to fetch mappings" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { picqerWarehouseId, picqerWarehouseName, exactDivision, exactWarehouseCode, exactWarehouseName } = body;
+
+    if (!picqerWarehouseId || !exactDivision || !exactWarehouseCode) {
+      return NextResponse.json(
+        { error: "picqerWarehouseId, exactDivision, and exactWarehouseCode are required" },
+        { status: 400 }
+      );
+    }
+
+    const [mapping] = await db
+      .insert(warehouseMappings)
+      .values({
+        picqerWarehouseId,
+        picqerWarehouseName,
+        exactDivision,
+        exactWarehouseCode,
+        exactWarehouseName,
+      })
+      .returning();
+
+    return NextResponse.json(mapping, { status: 201 });
+  } catch (error) {
+    console.error("Mapping create error:", error);
+    return NextResponse.json({ error: "Failed to create mapping" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const [mapping] = await db
+      .update(warehouseMappings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(warehouseMappings.id, id))
+      .returning();
+
+    return NextResponse.json(mapping);
+  } catch (error) {
+    console.error("Mapping update error:", error);
+    return NextResponse.json({ error: "Failed to update mapping" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { id } = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    await db.delete(warehouseMappings).where(eq(warehouseMappings.id, id));
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Mapping delete error:", error);
+    return NextResponse.json({ error: "Failed to delete mapping" }, { status: 500 });
+  }
+}
