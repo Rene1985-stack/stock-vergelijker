@@ -1,6 +1,5 @@
 import { getDb } from "./db";
 import { exactTokens } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 const EXACT_BASE_URL = "https://start.exactonline.nl";
 const EXACT_CLIENT_ID = process.env.EXACT_CLIENT_ID!;
@@ -95,15 +94,15 @@ async function refreshAccessToken(): Promise<string> {
 
   const data = await res.json();
 
-  await getDb()
-    .update(exactTokens)
-    .set({
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-      updatedAt: new Date(),
-    })
-    .where(eq(exactTokens.id, token.id));
+  // Use raw SQL to avoid Drizzle DEFAULT keyword issues with Neon HTTP driver
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(process.env.DATABASE_URL!);
+  const newExpiresAt = new Date(Date.now() + data.expires_in * 1000);
+
+  await sql(
+    "UPDATE exact_tokens SET access_token = $1, refresh_token = $2, expires_at = $3, updated_at = NOW() WHERE id = $4",
+    [data.access_token, data.refresh_token, newExpiresAt.toISOString(), token.id]
+  );
 
   return data.access_token;
 }
@@ -411,14 +410,14 @@ export async function saveTokens(
   expiresIn: number
 ) {
   const expiresAt = new Date(Date.now() + expiresIn * 1000);
-  const db = getDb();
 
-  // Single row: delete all and insert fresh
-  await db.delete(exactTokens);
-  await db.insert(exactTokens).values({
-    division,
-    accessToken,
-    refreshToken,
-    expiresAt,
-  });
+  // Use raw SQL to avoid Drizzle's DEFAULT keyword issues with Neon HTTP driver
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(process.env.DATABASE_URL!);
+
+  await sql("DELETE FROM exact_tokens");
+  await sql(
+    "INSERT INTO exact_tokens (division, access_token, refresh_token, expires_at, updated_at) VALUES ($1, $2, $3, $4, NOW())",
+    [division, accessToken, refreshToken, expiresAt.toISOString()]
+  );
 }
