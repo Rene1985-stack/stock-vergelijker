@@ -125,7 +125,7 @@ export async function getAccessToken(): Promise<string> {
 }
 
 // Force refresh the token (called on 401 from API)
-async function forceRefreshToken(): Promise<string> {
+export async function forceRefreshToken(): Promise<string> {
   console.log("[Exact API] Forcing token refresh due to 401");
   return refreshAccessToken();
 }

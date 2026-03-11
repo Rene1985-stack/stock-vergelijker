@@ -3,10 +3,10 @@ import {
   getPurchaseOrders,
   aggregateIncoming,
 } from "./picqer";
-import { getItemWarehouses } from "./exact";
 import { getDb } from "./db";
 import { stockCache, warehouseMappings } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
 import type { WarehouseMapping } from "@/db/schema";
 
 export interface ComparisonRow {
@@ -68,22 +68,49 @@ export async function getComparison(
         skusWithDifference: rows.filter((r) => r.hasDifference).length,
         fetchedAt: cached[0].fetchedAt,
         fromCache: true,
-        exactComplete: true, // Cached data was already validated as complete
+        exactComplete: true,
         exactItemCount: 0,
         exactPageCount: 0,
       };
     }
   }
 
-  // Fetch fresh data from both APIs
-  const [picqerStock, picqerPOs, exactResult] = await Promise.all([
+  // Read Exact data from exact_stock table (pre-synced via /api/sync-exact)
+  const sql = neon(process.env.DATABASE_URL!);
+
+  // Verify sync is complete
+  const syncStates = await sql(
+    "SELECT * FROM sync_state WHERE mapping_id = $1",
+    [mappingId]
+  );
+  const syncState = syncStates[0];
+  if (!syncState || syncState.next_url) {
+    throw new Error(
+      "Exact Online data nog niet gesynchroniseerd. Start synchronisatie eerst."
+    );
+  }
+
+  // Read synced Exact stock data
+  const exactRows = await sql(
+    "SELECT * FROM exact_stock WHERE mapping_id = $1",
+    [mappingId]
+  );
+
+  // Transform to a usable format
+  const exactData = exactRows.map((r) => ({
+    ItemCode: r.item_code as string,
+    ItemDescription: (r.item_description as string) || "",
+    CurrentStock: Number(r.current_stock) || 0,
+    PlannedStockIn: Number(r.planned_stock_in) || 0,
+    PlannedStockOut: Number(r.planned_stock_out) || 0,
+    ReservedStock: Number(r.reserved_stock) || 0,
+  }));
+
+  // Fetch fresh Picqer data (fast: 500 req/min, 100 items/page)
+  const [picqerStock, picqerPOs] = await Promise.all([
     getWarehouseStock(mapping.picqerWarehouseId),
     getPurchaseOrders(mapping.picqerWarehouseId),
-    getItemWarehouses(mapping.exactDivision, mapping.exactWarehouseCode),
   ]);
-
-  const exactData = exactResult.data;
-  const exactComplete = exactResult.complete;
 
   // Aggregate Picqer incoming from purchase orders
   const incomingMap = aggregateIncoming(picqerPOs);
@@ -149,18 +176,19 @@ export async function getComparison(
 
   const fetchedAt = new Date();
 
-  // Only cache COMPLETE results — partial data would give wrong comparisons
-  if (exactComplete) {
-    try {
-      await getDb().delete(stockCache).where(eq(stockCache.mappingId, mappingId));
+  // Save to cache
+  try {
+    await getDb()
+      .delete(stockCache)
+      .where(eq(stockCache.mappingId, mappingId));
 
-      if (rows.length > 0) {
-        // Insert in very small batches - Neon HTTP driver has strict param limits
-        // 10 columns per row × 5 rows = 50 params per query (safe for Neon)
-        const batchSize = 5;
-        for (let i = 0; i < rows.length; i += batchSize) {
-          const batch = rows.slice(i, i + batchSize);
-          await getDb().insert(stockCache).values(
+    if (rows.length > 0) {
+      const batchSize = 5;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        await getDb()
+          .insert(stockCache)
+          .values(
             batch.map((row) => ({
               mappingId,
               sku: row.sku,
@@ -174,16 +202,10 @@ export async function getComparison(
               fetchedAt,
             }))
           );
-        }
       }
-    } catch (cacheErr) {
-      console.error("[Cache] Failed to save comparison cache:", cacheErr);
     }
-  } else {
-    console.log(
-      `[Comparison] Skipping cache for mapping ${mappingId} — ` +
-      `Exact data incomplete (${exactData.length} items from ${exactResult.pageCount} pages)`
-    );
+  } catch (cacheErr) {
+    console.error("[Cache] Failed to save comparison cache:", cacheErr);
   }
 
   return {
@@ -193,9 +215,9 @@ export async function getComparison(
     skusWithDifference: rows.filter((r) => r.hasDifference).length,
     fetchedAt,
     fromCache: false,
-    exactComplete,
+    exactComplete: true,
     exactItemCount: exactData.length,
-    exactPageCount: exactResult.pageCount,
+    exactPageCount: 0,
   };
 }
 
@@ -223,7 +245,6 @@ function cacheToRow(entry: typeof stockCache.$inferSelect): ComparisonRow {
     stockDiff,
     incomingDiff,
     outgoingDiff,
-    // Only stock and incoming diffs count — Exact has no planned outgoing
     hasDifference: stockDiff !== 0 || incomingDiff !== 0,
   };
 }
