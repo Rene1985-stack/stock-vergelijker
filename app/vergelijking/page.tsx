@@ -84,9 +84,12 @@ function VergelijkingPage() {
     setError(null);
 
     fetch(`/api/comparison?mapping_id=${mappingId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Vergelijking mislukt");
-        return res.json();
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error || `Vergelijking mislukt (HTTP ${res.status})`);
+        }
+        return json;
       })
       .then((result) => {
         setData(result);
@@ -207,9 +210,13 @@ function VergelijkingPage() {
       )}
 
       {loading && !data && (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
           <p className="text-muted-foreground">
             Data ophalen uit Picqer en Exact Online...
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Dit kan tot 60 seconden duren bij grote magazijnen.
           </p>
         </div>
       )}

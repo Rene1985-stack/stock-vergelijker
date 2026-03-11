@@ -12,9 +12,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-interface TokenInfo {
-  division: number;
-  expiresAt: string | null;
+interface TokenStatus {
+  connected: boolean;
+  division: number | null;
   updatedAt: string | null;
 }
 
@@ -31,26 +31,34 @@ function InstellingenPage() {
   const connected = searchParams.get("connected");
   const error = searchParams.get("error");
 
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
+  const [tokenStatus, setTokenStatus] = useState<TokenStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [picqerStatus, setPicqerStatus] = useState<"checking" | "ok" | "error">("checking");
+  const [picqerError, setPicqerError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch Exact tokens
     fetch("/api/exact/token")
       .then((res) => res.json())
       .then((data) => {
-        setTokens(Array.isArray(data) ? data : []);
+        setTokenStatus(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
 
-    // Test Picqer connection
     fetch("/api/picqer/warehouses")
-      .then((res) => {
-        setPicqerStatus(res.ok ? "ok" : "error");
+      .then(async (res) => {
+        if (res.ok) {
+          setPicqerStatus("ok");
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setPicqerError(data.error || `HTTP ${res.status}`);
+          setPicqerStatus("error");
+        }
       })
-      .catch(() => setPicqerStatus("error"));
+      .catch((err) => {
+        setPicqerError(err.message);
+        setPicqerStatus("error");
+      });
   }, []);
 
   return (
@@ -59,13 +67,13 @@ function InstellingenPage() {
 
       {connected && (
         <div className="mb-4 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800">
-          Exact Online divisie {connected} succesvol verbonden!
+          Exact Online succesvol verbonden!
         </div>
       )}
 
       {error && (
         <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800">
-          Verbinding met Exact Online mislukt. Probeer het opnieuw.
+          Verbinding met Exact Online mislukt: {decodeURIComponent(error)}
         </div>
       )}
 
@@ -90,6 +98,9 @@ function InstellingenPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {picqerError && (
+              <p className="text-sm text-red-600 mb-2">{picqerError}</p>
+            )}
             <p className="text-sm text-muted-foreground">
               Stel <code className="bg-muted px-1 rounded">PICQER_API_KEY</code> en{" "}
               <code className="bg-muted px-1 rounded">PICQER_BASE_URL</code> in als
@@ -101,46 +112,31 @@ function InstellingenPage() {
         {/* Exact Online connection */}
         <Card>
           <CardHeader>
-            <CardTitle>Exact Online</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Exact Online
+              {loading ? (
+                <Badge variant="outline">Controleren...</Badge>
+              ) : tokenStatus?.connected ? (
+                <Badge className="bg-green-100 text-green-800">Verbonden</Badge>
+              ) : (
+                <Badge variant="destructive">Niet verbonden</Badge>
+              )}
+            </CardTitle>
             <CardDescription>
-              OAuth2 connectie per administratie/divisie. Klik op verbinden om een
-              nieuwe divisie te koppelen.
+              Eenmalige OAuth2 koppeling. Eén verbinding werkt voor alle administraties/divisies.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <a href="/api/exact/auth">
-                <Button>Verbind met Exact Online</Button>
+                <Button>
+                  {tokenStatus?.connected ? "Opnieuw verbinden" : "Verbind met Exact Online"}
+                </Button>
               </a>
 
-              {loading ? (
-                <p className="text-muted-foreground text-sm">Laden...</p>
-              ) : tokens.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Verbonden divisies:</p>
-                  {tokens.map((t) => (
-                    <div
-                      key={t.division}
-                      className="flex items-center justify-between p-3 rounded-lg border"
-                    >
-                      <div>
-                        <span className="font-mono font-medium">
-                          Divisie {t.division}
-                        </span>
-                        {t.updatedAt && (
-                          <span className="text-sm text-muted-foreground ml-2">
-                            Laatst vernieuwd:{" "}
-                            {new Date(t.updatedAt).toLocaleString("nl-NL")}
-                          </span>
-                        )}
-                      </div>
-                      <Badge className="bg-green-100 text-green-800">Actief</Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
+              {tokenStatus?.connected && tokenStatus.updatedAt && (
                 <p className="text-sm text-muted-foreground">
-                  Nog geen divisies verbonden. Klik hierboven om te verbinden.
+                  Laatst verbonden: {new Date(tokenStatus.updatedAt).toLocaleString("nl-NL")}
                 </p>
               )}
             </div>

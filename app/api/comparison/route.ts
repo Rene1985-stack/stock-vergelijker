@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getComparison } from "@/lib/comparison";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // 60s max (Hobby plan limit)
 
 export async function GET(request: NextRequest) {
   const mappingId = request.nextUrl.searchParams.get("mapping_id");

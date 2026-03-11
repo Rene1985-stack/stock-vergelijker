@@ -4,7 +4,7 @@ import {
   aggregateIncoming,
 } from "./picqer";
 import { getItemWarehouses } from "./exact";
-import { db } from "./db";
+import { getDb } from "./db";
 import { stockCache, warehouseMappings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { WarehouseMapping } from "@/db/schema";
@@ -39,7 +39,7 @@ export async function getComparison(
   mappingId: number
 ): Promise<ComparisonResult> {
   // Get mapping
-  const [mapping] = await db
+  const [mapping] = await getDb()
     .select()
     .from(warehouseMappings)
     .where(eq(warehouseMappings.id, mappingId));
@@ -49,7 +49,7 @@ export async function getComparison(
   }
 
   // Check cache
-  const cached = await db
+  const cached = await getDb()
     .select()
     .from(stockCache)
     .where(eq(stockCache.mappingId, mappingId));
@@ -137,14 +137,15 @@ export async function getComparison(
   const fetchedAt = new Date();
 
   // Save to cache (clear old, insert new)
-  await db.delete(stockCache).where(eq(stockCache.mappingId, mappingId));
+  await getDb().delete(stockCache).where(eq(stockCache.mappingId, mappingId));
 
   if (rows.length > 0) {
-    // Insert in batches of 100 to avoid query size limits
-    const batchSize = 100;
+    // Insert in small batches - Neon HTTP driver limits params per query
+    // 10 columns per row, so batch of 20 = 200 params (well under limit)
+    const batchSize = 20;
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize);
-      await db.insert(stockCache).values(
+      await getDb().insert(stockCache).values(
         batch.map((row) => ({
           mappingId,
           sku: row.sku,

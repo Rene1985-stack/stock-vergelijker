@@ -1,4 +1,4 @@
-const PICQER_BASE_URL = process.env.PICQER_BASE_URL!;
+const PICQER_BASE_URL = (process.env.PICQER_BASE_URL || "").replace(/\/+$/, "");
 const PICQER_API_KEY = process.env.PICQER_API_KEY!;
 
 function getAuthHeader(): string {

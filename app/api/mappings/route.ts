@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { warehouseMappings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const mappings = await db.select().from(warehouseMappings);
+    const mappings = await getDb().select().from(warehouseMappings);
     return NextResponse.json(mappings);
   } catch (error) {
     console.error("Mapping list error:", error);
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [mapping] = await db
+    const [mapping] = await getDb()
       .insert(warehouseMappings)
       .values({
         picqerWarehouseId,
@@ -54,7 +54,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const [mapping] = await db
+    const [mapping] = await getDb()
       .update(warehouseMappings)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(warehouseMappings.id, id))
@@ -75,7 +75,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    await db.delete(warehouseMappings).where(eq(warehouseMappings.id, id));
+    await getDb().delete(warehouseMappings).where(eq(warehouseMappings.id, id));
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Mapping delete error:", error);
