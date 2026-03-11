@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Card,
@@ -49,20 +49,75 @@ interface ComparisonResult {
   fromCache: boolean;
 }
 
+type SortKey =
+  | "sku"
+  | "productName"
+  | "picqerStock"
+  | "exactStock"
+  | "stockDiff"
+  | "picqerIncoming"
+  | "exactPlannedIn"
+  | "incomingDiff";
+
+type SortDir = "asc" | "desc";
+
+const MAX_STOCK = 100_000;
+
+/** Format number with Dutch thousand separators (dots) */
+function fmt(n: number): string {
+  return n.toLocaleString("nl-NL");
+}
+
 function DiffCell({ value }: { value: number }) {
-  if (value === 0) return <TableCell className="text-center text-green-600">0</TableCell>;
+  if (value === 0)
+    return <TableCell className="text-center text-green-600">0</TableCell>;
   return (
     <TableCell
       className={`text-center font-medium ${value > 0 ? "text-red-600" : "text-orange-600"}`}
     >
-      {value > 0 ? `+${value}` : value}
+      {value > 0 ? `+${fmt(value)}` : fmt(value)}
     </TableCell>
+  );
+}
+
+/** Clickable sort header */
+function SortableHead({
+  label,
+  sortKey,
+  currentKey,
+  currentDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  currentDir: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = currentKey === sortKey;
+  const arrow = active ? (currentDir === "asc" ? " \u25B2" : " \u25BC") : "";
+  return (
+    <TableHead
+      className={`cursor-pointer select-none hover:bg-muted/50 ${className ?? ""}`}
+      onClick={() => onSort(sortKey)}
+    >
+      {label}
+      {arrow}
+    </TableHead>
   );
 }
 
 export default function VergelijkingPageWrapper() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20"><p className="text-muted-foreground">Laden...</p></div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-20">
+          <p className="text-muted-foreground">Laden...</p>
+        </div>
+      }
+    >
       <VergelijkingPage />
     </Suspense>
   );
@@ -78,6 +133,9 @@ function VergelijkingPage() {
   const [search, setSearch] = useState("");
   const [showOnlyDiffs, setShowOnlyDiffs] = useState(false);
   const [minDiff, setMinDiff] = useState("0");
+  const [hideHighStock, setHideHighStock] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>("stockDiff");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const fetchComparison = () => {
     if (!mappingId) return;
@@ -93,11 +151,13 @@ function VergelijkingPage() {
         try {
           json = JSON.parse(text);
         } catch {
-          // Vercel returns HTML on timeout/500 — extract useful message
-          if (res.status === 504 || text.includes("FUNCTION_INVOCATION_TIMEOUT")) {
+          if (
+            res.status === 504 ||
+            text.includes("FUNCTION_INVOCATION_TIMEOUT")
+          ) {
             throw new Error(
               "Timeout: het ophalen duurde te lang (>60s). " +
-              "Probeer het opnieuw — de cache wordt geleidelijk opgebouwd."
+                "Probeer het opnieuw \u2014 de cache wordt geleidelijk opgebouwd."
             );
           }
           throw new Error(
@@ -106,7 +166,9 @@ function VergelijkingPage() {
         }
 
         if (!res.ok) {
-          throw new Error(json.error || `Vergelijking mislukt (HTTP ${res.status})`);
+          throw new Error(
+            json.error || `Vergelijking mislukt (HTTP ${res.status})`
+          );
         }
         return json;
       })
@@ -125,10 +187,34 @@ function VergelijkingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mappingId]);
 
+  const handleSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      } else {
+        setSortKey(key);
+        // Default: numbers descending, text ascending
+        setSortDir(
+          key === "sku" || key === "productName" ? "asc" : "desc"
+        );
+      }
+    },
+    [sortKey]
+  );
+
   const filteredRows = useMemo(() => {
     if (!data) return [];
     let rows = data.rows;
     const threshold = parseInt(minDiff, 10) || 0;
+
+    // Filter out products with extreme stock values (test/dummy data)
+    if (hideHighStock) {
+      rows = rows.filter(
+        (r) =>
+          Math.abs(r.picqerStock) <= MAX_STOCK &&
+          Math.abs(r.exactStock) <= MAX_STOCK
+      );
+    }
 
     if (showOnlyDiffs) {
       rows = rows.filter((r) => r.hasDifference);
@@ -150,8 +236,24 @@ function VergelijkingPage() {
           r.productName.toLowerCase().includes(q)
       );
     }
+
+    // Sort
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows = [...rows].sort((a, b) => {
+      let cmp: number;
+      if (sortKey === "sku" || sortKey === "productName") {
+        cmp = (a[sortKey] ?? "").localeCompare(b[sortKey] ?? "", "nl");
+      } else if (sortKey === "stockDiff" || sortKey === "incomingDiff") {
+        // Sort by absolute value for diff columns (biggest differences first)
+        cmp = Math.abs(a[sortKey]) - Math.abs(b[sortKey]);
+      } else {
+        cmp = (a[sortKey] ?? 0) - (b[sortKey] ?? 0);
+      }
+      return cmp * dir;
+    });
+
     return rows;
-  }, [data, search, showOnlyDiffs, minDiff]);
+  }, [data, search, showOnlyDiffs, minDiff, hideHighStock, sortKey, sortDir]);
 
   const exportCsv = () => {
     if (!filteredRows.length) return;
@@ -195,8 +297,12 @@ function VergelijkingPage() {
   };
 
   if (!mappingId) {
-    return <p className="text-muted-foreground">Geen mapping_id opgegeven.</p>;
+    return (
+      <p className="text-muted-foreground">Geen mapping_id opgegeven.</p>
+    );
   }
+
+  const sharedHeadCls = "text-center";
 
   return (
     <div>
@@ -206,7 +312,8 @@ function VergelijkingPage() {
           {data && (
             <p className="text-muted-foreground">
               {data.mapping.picqerWarehouseName} vs{" "}
-              {data.mapping.exactWarehouseName} (Div. {data.mapping.exactDivision})
+              {data.mapping.exactWarehouseName} (Div.{" "}
+              {data.mapping.exactDivision})
               {data.fromCache && (
                 <Badge variant="outline" className="ml-2">
                   Cache
@@ -256,7 +363,7 @@ function VergelijkingPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">{data.totalSkus}</p>
+                <p className="text-2xl font-bold">{fmt(data.totalSkus)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -267,7 +374,7 @@ function VergelijkingPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold text-red-600">
-                  {data.skusWithDifference}
+                  {fmt(data.skusWithDifference)}
                 </p>
               </CardContent>
             </Card>
@@ -298,7 +405,7 @@ function VergelijkingPage() {
               onClick={() => setShowOnlyDiffs(!showOnlyDiffs)}
               size="sm"
             >
-              Alleen verschillen ({data.skusWithDifference})
+              Alleen verschillen ({fmt(data.skusWithDifference)})
             </Button>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -319,8 +426,19 @@ function VergelijkingPage() {
                 <option value="100">&ge; 100</option>
               </select>
             </div>
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideHighStock}
+                onChange={(e) => setHideHighStock(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <span className="text-muted-foreground whitespace-nowrap">
+                Verberg &gt;{fmt(MAX_STOCK)} voorraad
+              </span>
+            </label>
             <span className="text-sm text-muted-foreground self-center">
-              {filteredRows.length} resultaten
+              {fmt(filteredRows.length)} resultaten
             </span>
           </div>
 
@@ -335,20 +453,68 @@ function VergelijkingPage() {
                   <TableHead rowSpan={2} className="align-bottom">
                     Product
                   </TableHead>
-                  <TableHead colSpan={3} className="text-center border-l bg-blue-50">
+                  <TableHead
+                    colSpan={3}
+                    className="text-center border-l bg-blue-50"
+                  >
                     Voorraad
                   </TableHead>
-                  <TableHead colSpan={3} className="text-center border-l bg-green-50">
+                  <TableHead
+                    colSpan={3}
+                    className="text-center border-l bg-green-50"
+                  >
                     Inkomend
                   </TableHead>
                 </TableRow>
                 <TableRow>
-                  <TableHead className="text-center border-l bg-blue-50">Picqer</TableHead>
-                  <TableHead className="text-center bg-blue-50">Exact</TableHead>
-                  <TableHead className="text-center bg-blue-50">Verschil</TableHead>
-                  <TableHead className="text-center border-l bg-green-50">Picqer</TableHead>
-                  <TableHead className="text-center bg-green-50">Exact</TableHead>
-                  <TableHead className="text-center bg-green-50">Verschil</TableHead>
+                  <SortableHead
+                    label="Picqer"
+                    sortKey="picqerStock"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} border-l bg-blue-50`}
+                  />
+                  <SortableHead
+                    label="Exact"
+                    sortKey="exactStock"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-blue-50`}
+                  />
+                  <SortableHead
+                    label="Verschil"
+                    sortKey="stockDiff"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-blue-50`}
+                  />
+                  <SortableHead
+                    label="Picqer"
+                    sortKey="picqerIncoming"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} border-l bg-green-50`}
+                  />
+                  <SortableHead
+                    label="Exact"
+                    sortKey="exactPlannedIn"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-green-50`}
+                  />
+                  <SortableHead
+                    label="Verschil"
+                    sortKey="incomingDiff"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-green-50`}
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -364,24 +530,27 @@ function VergelijkingPage() {
                       {row.productName}
                     </TableCell>
                     <TableCell className="text-center border-l">
-                      {row.picqerStock}
+                      {fmt(row.picqerStock)}
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.exactStock}
+                      {fmt(row.exactStock)}
                     </TableCell>
                     <DiffCell value={row.stockDiff} />
                     <TableCell className="text-center border-l">
-                      {row.picqerIncoming}
+                      {fmt(row.picqerIncoming)}
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.exactPlannedIn}
+                      {fmt(row.exactPlannedIn)}
                     </TableCell>
                     <DiffCell value={row.incomingDiff} />
                   </TableRow>
                 ))}
                 {filteredRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell
+                      colSpan={8}
+                      className="text-center py-8 text-muted-foreground"
+                    >
                       Geen resultaten gevonden.
                     </TableCell>
                   </TableRow>
