@@ -411,13 +411,24 @@ export async function saveTokens(
 ) {
   const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-  // Use raw SQL to avoid Drizzle's DEFAULT keyword issues with Neon HTTP driver
+  // Use raw SQL to avoid Drizzle's DEFAULT keyword issues with Neon HTTP driver.
+  // Single atomic UPSERT: if a row with this division exists, update it;
+  // otherwise insert. Also delete any other rows first (we only keep one token).
   const { neon } = await import("@neondatabase/serverless");
   const sql = neon(process.env.DATABASE_URL!);
 
-  await sql("DELETE FROM exact_tokens");
+  // Delete any tokens for OTHER divisions (we keep a single token)
+  await sql("DELETE FROM exact_tokens WHERE division != $1", [division]);
+
+  // Upsert the token for this division
   await sql(
-    "INSERT INTO exact_tokens (division, access_token, refresh_token, expires_at, updated_at) VALUES ($1, $2, $3, $4, NOW())",
+    `INSERT INTO exact_tokens (division, access_token, refresh_token, expires_at, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (division) DO UPDATE SET
+       access_token = EXCLUDED.access_token,
+       refresh_token = EXCLUDED.refresh_token,
+       expires_at = EXCLUDED.expires_at,
+       updated_at = NOW()`,
     [division, accessToken, refreshToken, expiresAt.toISOString()]
   );
 }
