@@ -31,6 +31,9 @@ export interface ComparisonResult {
   skusWithDifference: number;
   fetchedAt: Date;
   fromCache: boolean;
+  exactComplete: boolean;
+  exactItemCount: number;
+  exactPageCount: number;
 }
 
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -65,16 +68,22 @@ export async function getComparison(
         skusWithDifference: rows.filter((r) => r.hasDifference).length,
         fetchedAt: cached[0].fetchedAt,
         fromCache: true,
+        exactComplete: true, // Cached data was already validated as complete
+        exactItemCount: 0,
+        exactPageCount: 0,
       };
     }
   }
 
   // Fetch fresh data from both APIs
-  const [picqerStock, picqerPOs, exactData] = await Promise.all([
+  const [picqerStock, picqerPOs, exactResult] = await Promise.all([
     getWarehouseStock(mapping.picqerWarehouseId),
     getPurchaseOrders(mapping.picqerWarehouseId),
     getItemWarehouses(mapping.exactDivision, mapping.exactWarehouseCode),
   ]);
+
+  const exactData = exactResult.data;
+  const exactComplete = exactResult.complete;
 
   // Aggregate Picqer incoming from purchase orders
   const incomingMap = aggregateIncoming(picqerPOs);
@@ -140,36 +149,41 @@ export async function getComparison(
 
   const fetchedAt = new Date();
 
-  // Save to cache (clear old, insert new)
-  // Cache errors should NOT block the comparison result from being returned
-  try {
-    await getDb().delete(stockCache).where(eq(stockCache.mappingId, mappingId));
+  // Only cache COMPLETE results — partial data would give wrong comparisons
+  if (exactComplete) {
+    try {
+      await getDb().delete(stockCache).where(eq(stockCache.mappingId, mappingId));
 
-    if (rows.length > 0) {
-      // Insert in very small batches - Neon HTTP driver has strict param limits
-      // 10 columns per row × 5 rows = 50 params per query (safe for Neon)
-      const batchSize = 5;
-      for (let i = 0; i < rows.length; i += batchSize) {
-        const batch = rows.slice(i, i + batchSize);
-        await getDb().insert(stockCache).values(
-          batch.map((row) => ({
-            mappingId,
-            sku: row.sku,
-            productName: row.productName || null,
-            picqerStock: row.picqerStock,
-            picqerReserved: row.picqerReserved,
-            picqerIncoming: row.picqerIncoming,
-            exactStock: String(row.exactStock),
-            exactPlannedIn: String(row.exactPlannedIn),
-            exactPlannedOut: String(row.exactPlannedOut),
-            fetchedAt,
-          }))
-        );
+      if (rows.length > 0) {
+        // Insert in very small batches - Neon HTTP driver has strict param limits
+        // 10 columns per row × 5 rows = 50 params per query (safe for Neon)
+        const batchSize = 5;
+        for (let i = 0; i < rows.length; i += batchSize) {
+          const batch = rows.slice(i, i + batchSize);
+          await getDb().insert(stockCache).values(
+            batch.map((row) => ({
+              mappingId,
+              sku: row.sku,
+              productName: row.productName || null,
+              picqerStock: row.picqerStock,
+              picqerReserved: row.picqerReserved,
+              picqerIncoming: row.picqerIncoming,
+              exactStock: String(row.exactStock),
+              exactPlannedIn: String(row.exactPlannedIn),
+              exactPlannedOut: String(row.exactPlannedOut),
+              fetchedAt,
+            }))
+          );
+        }
       }
+    } catch (cacheErr) {
+      console.error("[Cache] Failed to save comparison cache:", cacheErr);
     }
-  } catch (cacheErr) {
-    console.error("[Cache] Failed to save comparison cache:", cacheErr);
-    // Continue — the comparison result is still valid
+  } else {
+    console.log(
+      `[Comparison] Skipping cache for mapping ${mappingId} — ` +
+      `Exact data incomplete (${exactData.length} items from ${exactResult.pageCount} pages)`
+    );
   }
 
   return {
@@ -179,6 +193,9 @@ export async function getComparison(
     skusWithDifference: rows.filter((r) => r.hasDifference).length,
     fetchedAt,
     fromCache: false,
+    exactComplete,
+    exactItemCount: exactData.length,
+    exactPageCount: exactResult.pageCount,
   };
 }
 

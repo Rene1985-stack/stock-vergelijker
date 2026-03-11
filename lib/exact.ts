@@ -252,15 +252,22 @@ async function exactFetch(
  * - On 429: waits precisely until reset
  * - Time budget: stops before Vercel timeout (default 50s)
  */
+export interface FetchResult<T> {
+  data: T[];
+  complete: boolean;
+  pageCount: number;
+}
+
 async function exactFetchAll<T>(
   division: number,
   path: string,
   timeBudgetMs = 50000 // Stop 10s before Vercel's 60s limit
-): Promise<T[]> {
+): Promise<FetchResult<T>> {
   const startTime = Date.now();
   const results: T[] = [];
   let url: string = `${EXACT_BASE_URL}/api/v1/${division}${path}`;
   let pageCount = 0;
+  let complete = true;
 
   while (url) {
     // Check time budget before starting a new page fetch
@@ -268,9 +275,10 @@ async function exactFetchAll<T>(
     if (elapsed > timeBudgetMs) {
       console.log(
         `[Exact API] Time budget exhausted after ${pageCount} pages ` +
-        `(${Math.round(elapsed / 1000)}s). Returning ${results.length} items.`
+        `(${Math.round(elapsed / 1000)}s). Returning ${results.length} items (INCOMPLETE).`
       );
-      break; // Return what we have rather than timing out
+      complete = false;
+      break;
     }
 
     const res = await exactFetch(
@@ -300,11 +308,12 @@ async function exactFetchAll<T>(
       if (Date.now() + waitTime - startTime > timeBudgetMs) {
         console.log(
           `[Exact API] Rate limit wait (${Math.round(waitTime / 1000)}s) would exceed ` +
-          `time budget. Returning ${results.length} items from ${pageCount} pages.`
+          `time budget. Returning ${results.length} items from ${pageCount} pages (INCOMPLETE).`
         );
         const data = await res.json();
         const items = data.d?.results || [];
         results.push(...items);
+        complete = false;
         break;
       }
       console.log(
@@ -333,8 +342,11 @@ async function exactFetchAll<T>(
     }
   }
 
-  console.log(`[Exact API] Fetched ${results.length} items in ${pageCount} pages for division ${division}`);
-  return results;
+  console.log(
+    `[Exact API] Fetched ${results.length} items in ${pageCount} pages for division ${division}` +
+    (complete ? " (complete)" : " (INCOMPLETE)")
+  );
+  return { data: results, complete, pageCount };
 }
 
 // ── Types ────────────────────────────────────────
@@ -362,7 +374,7 @@ export interface ExactWarehouse {
 export async function getItemWarehouses(
   division: number,
   warehouseCode: string
-): Promise<ExactItemWarehouse[]> {
+): Promise<FetchResult<ExactItemWarehouse>> {
   // Filter to items with non-zero stock/planned to dramatically reduce pages.
   // Items with 0 across the board are irrelevant for comparison (Picqer side
   // still captures items that exist only there).

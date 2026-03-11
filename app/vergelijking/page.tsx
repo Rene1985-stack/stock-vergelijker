@@ -47,6 +47,9 @@ interface ComparisonResult {
   skusWithDifference: number;
   fetchedAt: string;
   fromCache: boolean;
+  exactComplete: boolean;
+  exactItemCount: number;
+  exactPageCount: number;
 }
 
 type SortKey =
@@ -350,6 +353,22 @@ function VergelijkingPage() {
             Dit kan tot 60 seconden duren bij grote magazijnen.
           </p>
         </div>
+      )}
+
+      {data && !data.exactComplete && (
+        <Card className="mb-4 border-orange-300 bg-orange-50">
+          <CardContent className="pt-4">
+            <p className="text-orange-800 font-medium">
+              ⚠ Onvolledige Exact Online data
+            </p>
+            <p className="text-orange-700 text-sm mt-1">
+              Exact Online heeft te veel artikelen voor een enkele request
+              ({fmt(data.exactItemCount)} opgehaald in {data.exactPageCount} pagina&apos;s,
+              maar er zijn meer). Artikelen die niet opgehaald zijn tonen Exact 0.
+              De data wordt niet gecached — bij de volgende poging wordt opnieuw opgehaald.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {data && (
