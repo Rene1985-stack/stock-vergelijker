@@ -137,29 +137,35 @@ export async function getComparison(
   const fetchedAt = new Date();
 
   // Save to cache (clear old, insert new)
-  await getDb().delete(stockCache).where(eq(stockCache.mappingId, mappingId));
+  // Cache errors should NOT block the comparison result from being returned
+  try {
+    await getDb().delete(stockCache).where(eq(stockCache.mappingId, mappingId));
 
-  if (rows.length > 0) {
-    // Insert in small batches - Neon HTTP driver limits params per query
-    // 10 columns per row, so batch of 20 = 200 params (well under limit)
-    const batchSize = 20;
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize);
-      await getDb().insert(stockCache).values(
-        batch.map((row) => ({
-          mappingId,
-          sku: row.sku,
-          productName: row.productName,
-          picqerStock: row.picqerStock,
-          picqerReserved: row.picqerReserved,
-          picqerIncoming: row.picqerIncoming,
-          exactStock: String(row.exactStock),
-          exactPlannedIn: String(row.exactPlannedIn),
-          exactPlannedOut: String(row.exactPlannedOut),
-          fetchedAt,
-        }))
-      );
+    if (rows.length > 0) {
+      // Insert in very small batches - Neon HTTP driver has strict param limits
+      // 10 columns per row × 5 rows = 50 params per query (safe for Neon)
+      const batchSize = 5;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        await getDb().insert(stockCache).values(
+          batch.map((row) => ({
+            mappingId,
+            sku: row.sku,
+            productName: row.productName || null,
+            picqerStock: row.picqerStock,
+            picqerReserved: row.picqerReserved,
+            picqerIncoming: row.picqerIncoming,
+            exactStock: String(row.exactStock),
+            exactPlannedIn: String(row.exactPlannedIn),
+            exactPlannedOut: String(row.exactPlannedOut),
+            fetchedAt,
+          }))
+        );
+      }
     }
+  } catch (cacheErr) {
+    console.error("[Cache] Failed to save comparison cache:", cacheErr);
+    // Continue — the comparison result is still valid
   }
 
   return {
