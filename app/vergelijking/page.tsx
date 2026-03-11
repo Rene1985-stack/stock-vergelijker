@@ -12,13 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -293,21 +286,20 @@ function VergelijkingPage() {
               <span className="text-sm text-muted-foreground whitespace-nowrap">
                 Min. verschil:
               </span>
-              <Select value={minDiff} onValueChange={setMinDiff}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Alle</SelectItem>
-                  <SelectItem value="1">&#8805; 1</SelectItem>
-                  <SelectItem value="2">&#8805; 2</SelectItem>
-                  <SelectItem value="5">&#8805; 5</SelectItem>
-                  <SelectItem value="10">&#8805; 10</SelectItem>
-                  <SelectItem value="25">&#8805; 25</SelectItem>
-                  <SelectItem value="50">&#8805; 50</SelectItem>
-                  <SelectItem value="100">&#8805; 100</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={minDiff}
+                onChange={(e) => setMinDiff(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="0">Alle</option>
+                <option value="1">&ge; 1</option>
+                <option value="2">&ge; 2</option>
+                <option value="5">&ge; 5</option>
+                <option value="10">&ge; 10</option>
+                <option value="25">&ge; 25</option>
+                <option value="50">&ge; 50</option>
+                <option value="100">&ge; 100</option>
+              </select>
             </div>
             <span className="text-sm text-muted-foreground self-center">
               {filteredRows.length} resultaten
