@@ -9,9 +9,15 @@ export async function GET() {
   try {
     const mappings = await getDb().select().from(warehouseMappings);
     return NextResponse.json(mappings);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Mapping list error:", error);
-    const msg = error instanceof Error ? error.message : "Unknown error";
+    let msg = "Unknown error";
+    if (error instanceof Error) {
+      msg = error.message;
+      // Include cause if available (Neon driver nests errors)
+      const cause = (error as { cause?: { message?: string } }).cause;
+      if (cause?.message) msg += ` | Cause: ${cause.message}`;
+    }
     return NextResponse.json({ error: `Failed to fetch mappings: ${msg}` }, { status: 500 });
   }
 }
