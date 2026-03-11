@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -77,6 +84,7 @@ function VergelijkingPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showOnlyDiffs, setShowOnlyDiffs] = useState(false);
+  const [minDiff, setMinDiff] = useState("0");
 
   const fetchComparison = () => {
     if (!mappingId) return;
@@ -109,9 +117,20 @@ function VergelijkingPage() {
   const filteredRows = useMemo(() => {
     if (!data) return [];
     let rows = data.rows;
+    const threshold = parseInt(minDiff, 10) || 0;
+
     if (showOnlyDiffs) {
       rows = rows.filter((r) => r.hasDifference);
     }
+
+    if (threshold > 0) {
+      rows = rows.filter(
+        (r) =>
+          Math.abs(r.stockDiff) >= threshold ||
+          Math.abs(r.incomingDiff) >= threshold
+      );
+    }
+
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -121,7 +140,7 @@ function VergelijkingPage() {
       );
     }
     return rows;
-  }, [data, search, showOnlyDiffs]);
+  }, [data, search, showOnlyDiffs, minDiff]);
 
   const exportCsv = () => {
     if (!filteredRows.length) return;
@@ -135,9 +154,6 @@ function VergelijkingPage() {
       "Picqer Inkomend",
       "Exact Inkomend",
       "Verschil Inkomend",
-      "Picqer Uitgaand",
-      "Exact Uitgaand",
-      "Verschil Uitgaand",
     ];
 
     const csvRows = [
@@ -152,9 +168,6 @@ function VergelijkingPage() {
           r.picqerIncoming,
           r.exactPlannedIn,
           r.incomingDiff,
-          r.picqerReserved,
-          r.exactPlannedOut,
-          r.outgoingDiff,
         ].join(";")
       ),
     ];
@@ -262,7 +275,7 @@ function VergelijkingPage() {
           </div>
 
           {/* Filters */}
-          <div className="flex gap-4 mb-4">
+          <div className="flex flex-wrap gap-4 mb-4 items-center">
             <Input
               placeholder="Zoek op SKU of productnaam..."
               value={search}
@@ -276,6 +289,26 @@ function VergelijkingPage() {
             >
               Alleen verschillen ({data.skusWithDifference})
             </Button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                Min. verschil:
+              </span>
+              <Select value={minDiff} onValueChange={setMinDiff}>
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Alle</SelectItem>
+                  <SelectItem value="1">&#8805; 1</SelectItem>
+                  <SelectItem value="2">&#8805; 2</SelectItem>
+                  <SelectItem value="5">&#8805; 5</SelectItem>
+                  <SelectItem value="10">&#8805; 10</SelectItem>
+                  <SelectItem value="25">&#8805; 25</SelectItem>
+                  <SelectItem value="50">&#8805; 50</SelectItem>
+                  <SelectItem value="100">&#8805; 100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <span className="text-sm text-muted-foreground self-center">
               {filteredRows.length} resultaten
             </span>
@@ -298,9 +331,6 @@ function VergelijkingPage() {
                   <TableHead colSpan={3} className="text-center border-l bg-green-50">
                     Inkomend
                   </TableHead>
-                  <TableHead colSpan={3} className="text-center border-l bg-orange-50">
-                    Uitgaand
-                  </TableHead>
                 </TableRow>
                 <TableRow>
                   <TableHead className="text-center border-l bg-blue-50">Picqer</TableHead>
@@ -309,9 +339,6 @@ function VergelijkingPage() {
                   <TableHead className="text-center border-l bg-green-50">Picqer</TableHead>
                   <TableHead className="text-center bg-green-50">Exact</TableHead>
                   <TableHead className="text-center bg-green-50">Verschil</TableHead>
-                  <TableHead className="text-center border-l bg-orange-50">Picqer</TableHead>
-                  <TableHead className="text-center bg-orange-50">Exact</TableHead>
-                  <TableHead className="text-center bg-orange-50">Verschil</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -340,18 +367,11 @@ function VergelijkingPage() {
                       {row.exactPlannedIn}
                     </TableCell>
                     <DiffCell value={row.incomingDiff} />
-                    <TableCell className="text-center border-l">
-                      {row.picqerReserved}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {row.exactPlannedOut}
-                    </TableCell>
-                    <DiffCell value={row.outgoingDiff} />
                   </TableRow>
                 ))}
                 {filteredRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       Geen resultaten gevonden.
                     </TableCell>
                   </TableRow>

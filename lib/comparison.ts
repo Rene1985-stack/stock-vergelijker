@@ -124,13 +124,17 @@ export async function getComparison(
       stockDiff,
       incomingDiff,
       outgoingDiff,
-      hasDifference: stockDiff !== 0 || incomingDiff !== 0 || outgoingDiff !== 0,
+      // Only stock and incoming diffs count — Exact has no planned outgoing
+      hasDifference: stockDiff !== 0 || incomingDiff !== 0,
     });
   }
 
-  // Sort: differences first, then by SKU
+  // Sort: differences first (by largest absolute stock diff), then by SKU
   rows.sort((a, b) => {
     if (a.hasDifference !== b.hasDifference) return a.hasDifference ? -1 : 1;
+    if (a.hasDifference && b.hasDifference) {
+      return Math.abs(b.stockDiff) - Math.abs(a.stockDiff);
+    }
     return a.sku.localeCompare(b.sku);
   });
 
@@ -202,6 +206,7 @@ function cacheToRow(entry: typeof stockCache.$inferSelect): ComparisonRow {
     stockDiff,
     incomingDiff,
     outgoingDiff,
-    hasDifference: stockDiff !== 0 || incomingDiff !== 0 || outgoingDiff !== 0,
+    // Only stock and incoming diffs count — Exact has no planned outgoing
+    hasDifference: stockDiff !== 0 || incomingDiff !== 0,
   };
 }
