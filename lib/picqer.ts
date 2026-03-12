@@ -97,44 +97,24 @@ export async function getPurchaseOrders(
 
 // ── Product types ────────────────────────────────
 
-export interface PicqerProductType {
-  idproducttype: number;
-  name: string;
-}
-
 export interface PicqerProduct {
   idproduct: number;
   productcode: string;
   name: string;
-  type: string; // "normal" | "virtual" | "set"
-  idproducttype: number | null;
-}
-
-export async function getProductTypes(): Promise<PicqerProductType[]> {
-  return picqerFetchAll<PicqerProductType>("/producttypes");
+  type: string; // "normal" | "unlimited_stock" | "virtual_composition" | "composition_with_stock"
+  tags: string[];
 }
 
 /**
- * Fetch all products and build a map of productcode → product type name.
- * Fetches product types list first, then all products, and joins them.
+ * Fetch all products and build a map of productcode → type.
+ * Uses the built-in `type` field from Picqer products.
  */
 export async function getProductTypeMap(): Promise<Map<string, string>> {
-  const [productTypes, products] = await Promise.all([
-    getProductTypes(),
-    picqerFetchAll<PicqerProduct>("/products"),
-  ]);
+  const products = await picqerFetchAll<PicqerProduct>("/products");
 
-  // Build type ID → name lookup
-  const typeNames = new Map<number, string>();
-  for (const pt of productTypes) {
-    typeNames.set(pt.idproducttype, pt.name);
-  }
-
-  // Build productcode → type name
   const result = new Map<string, string>();
   for (const p of products) {
-    const typeName = p.idproducttype ? typeNames.get(p.idproducttype) ?? "" : "";
-    result.set(p.productcode, typeName);
+    result.set(p.productcode, p.type || "");
   }
 
   return result;
