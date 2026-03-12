@@ -7,11 +7,9 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table";
 
@@ -94,9 +92,14 @@ function fmt(n: number): string {
   return n.toLocaleString("nl-NL");
 }
 
-/** Format currency with Dutch formatting, no decimals (€ 1.234) */
+/** Format currency no decimals (€ 1.234) */
 function fmtEuro(n: number): string {
   return n.toLocaleString("nl-NL", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+/** Format currency 2 decimals (€ 0,54) */
+function fmtEuro2(n: number): string {
+  return n.toLocaleString("nl-NL", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function DiffCell({ value }: { value: number }) {
@@ -511,7 +514,7 @@ function VergelijkingPage() {
           r.sku,
           `"${r.productName.replace(/"/g, '""')}"`,
           `"${(r.productType || "").replace(/"/g, '""')}"`,
-          Math.round(r.costprice),
+          r.costprice.toFixed(2).replace(".", ","),
           r.picqerStock,
           r.exactStock,
           r.stockDiff,
@@ -693,18 +696,18 @@ function VergelijkingPage() {
             </span>
           </div>
 
-          {/* Comparison table with sticky header — full width */}
+          {/* Comparison table with sticky header — single scroll container */}
           <div className="border rounded-lg overflow-auto" style={{ maxHeight: "calc(100vh - 140px)" }}>
-            <Table className="w-full" style={{ tableLayout: "auto" }}>
-              <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-                <TableRow>
+            <table className="w-full caption-bottom text-sm" style={{ tableLayout: "auto" }}>
+              <thead className="sticky top-0 z-10 bg-background shadow-sm [&_tr]:border-b">
+                <tr>
                   <SortableHead
                     label="SKU"
                     sortKey="sku"
                     currentKey={sortKey}
                     currentDir={sortDir}
                     onSort={handleSort}
-                    className="align-bottom"
+                    className="align-bottom bg-background"
                     rowSpan={2}
                   />
                   <SortableHead
@@ -713,7 +716,7 @@ function VergelijkingPage() {
                     currentKey={sortKey}
                     currentDir={sortDir}
                     onSort={handleSort}
-                    className="align-bottom"
+                    className="align-bottom bg-background"
                     rowSpan={2}
                   />
                   <SortableHead
@@ -722,7 +725,7 @@ function VergelijkingPage() {
                     currentKey={sortKey}
                     currentDir={sortDir}
                     onSort={handleSort}
-                    className="align-bottom"
+                    className="align-bottom bg-background"
                     rowSpan={2}
                   />
                   <SortableHead
@@ -731,30 +734,21 @@ function VergelijkingPage() {
                     currentKey={sortKey}
                     currentDir={sortDir}
                     onSort={handleSort}
-                    className="align-bottom"
+                    className="align-bottom bg-background"
                     rowSpan={2}
                   />
-                  <TableHead
-                    colSpan={4}
-                    className="text-center border-l bg-blue-50"
-                  >
+                  <th colSpan={4} className="h-10 px-2 text-center font-medium border-l bg-blue-50">
                     Voorraad
-                  </TableHead>
-                  <TableHead
-                    colSpan={3}
-                    className="text-center border-l bg-green-50"
-                  >
+                  </th>
+                  <th colSpan={3} className="h-10 px-2 text-center font-medium border-l bg-green-50">
                     Inkomend
-                  </TableHead>
-                  <TableHead
-                    colSpan={3}
-                    className="text-center border-l bg-purple-50"
-                  >
+                  </th>
+                  <th colSpan={3} className="h-10 px-2 text-center font-medium border-l bg-purple-50">
                     Uitgaand
-                  </TableHead>
-                  <TableHead rowSpan={2} className="w-[40px] align-bottom" />
-                </TableRow>
-                <TableRow>
+                  </th>
+                  <th rowSpan={2} className="w-[40px] bg-background" />
+                </tr>
+                <tr>
                   <SortableHead
                     label="Picqer"
                     sortKey="picqerStock"
@@ -835,8 +829,8 @@ function VergelijkingPage() {
                     onSort={handleSort}
                     className={`${sharedHeadCls} bg-purple-50`}
                   />
-                </TableRow>
-              </TableHeader>
+                </tr>
+              </thead>
               <TableBody>
                 {/* Totals row */}
                 {filteredRows.length > 0 && (
@@ -881,7 +875,7 @@ function VergelijkingPage() {
                       {row.productType}
                     </TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground whitespace-nowrap">
-                      {row.costprice ? fmtEuro(row.costprice) : "–"}
+                      {row.costprice ? fmtEuro2(row.costprice) : "–"}
                     </TableCell>
                     <TableCell className="text-center border-l">
                       {fmt(row.picqerStock)}
@@ -932,7 +926,7 @@ function VergelijkingPage() {
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+            </table>
           </div>
         </>
       )}
