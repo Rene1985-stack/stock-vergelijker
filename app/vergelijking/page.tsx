@@ -111,7 +111,7 @@ function DiffCell({ value }: { value: number }) {
   );
 }
 
-/** Clickable sort header */
+/** Clickable sort header with resizable columns */
 function SortableHead({
   label,
   sortKey,
@@ -130,15 +130,15 @@ function SortableHead({
   rowSpan?: number;
 }) {
   const active = currentKey === sortKey;
-  const arrow = active ? (currentDir === "asc" ? " \u25B2" : " \u25BC") : "";
+  const arrow = active ? (currentDir === "asc" ? " ▲" : " ▼") : "";
   return (
     <TableHead
-      className={`cursor-pointer select-none hover:bg-muted/50 ${className ?? ""}`}
+      className={`cursor-pointer select-none hover:bg-muted/50 overflow-hidden resize-x ${className ?? ""}`}
       onClick={() => onSort(sortKey)}
       rowSpan={rowSpan}
+      style={{ minWidth: 40 }}
     >
-      {label}
-      {arrow}
+      <span className="whitespace-nowrap">{label}{arrow}</span>
     </TableHead>
   );
 }
@@ -174,7 +174,6 @@ function VergelijkingPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const abortRef = useRef(false);
   const [divisionNames, setDivisionNames] = useState<Record<number, string>>({});
-  const [tableWidth, setTableWidth] = useState(150); // percentage
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
 
@@ -663,22 +662,11 @@ function VergelijkingPage() {
             <span className="text-xs text-muted-foreground">
               {fmt(filteredRows.length)} rijen
             </span>
-            <span className="text-muted-foreground">|</span>
-            <span className="text-xs text-muted-foreground">Breedte:</span>
-            <input
-              type="range"
-              min={100}
-              max={300}
-              value={tableWidth}
-              onChange={(e) => setTableWidth(Number(e.target.value))}
-              className="w-20 h-1 accent-blue-600"
-            />
-            <span className="text-xs text-muted-foreground">{tableWidth}%</span>
           </div>
 
-          {/* Comparison table with sticky header */}
+          {/* Comparison table with sticky header — full width */}
           <div className="border rounded-lg overflow-auto" style={{ maxHeight: "calc(100vh - 140px)" }}>
-            <Table style={{ minWidth: `${tableWidth}%` }}>
+            <Table className="w-full" style={{ tableLayout: "auto" }}>
               <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
                 <TableRow>
                   <SortableHead
