@@ -111,7 +111,7 @@ function DiffCell({ value }: { value: number }) {
   );
 }
 
-/** Clickable sort header with resizable columns */
+/** Clickable sort header with drag-to-resize right border */
 function SortableHead({
   label,
   sortKey,
@@ -131,14 +131,43 @@ function SortableHead({
 }) {
   const active = currentKey === sortKey;
   const arrow = active ? (currentDir === "asc" ? " ▲" : " ▼") : "";
+  const thRef = useRef<HTMLTableCellElement>(null);
+
+  const onResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const th = thRef.current;
+      if (!th) return;
+      const startX = e.clientX;
+      const startW = th.offsetWidth;
+      const onMove = (ev: MouseEvent) => {
+        th.style.width = `${Math.max(40, startW + ev.clientX - startX)}px`;
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    []
+  );
+
   return (
     <TableHead
-      className={`cursor-pointer select-none hover:bg-muted/50 overflow-hidden resize-x ${className ?? ""}`}
+      ref={thRef}
+      className={`select-none relative group ${className ?? ""}`}
       onClick={() => onSort(sortKey)}
       rowSpan={rowSpan}
       style={{ minWidth: 40 }}
     >
-      <span className="whitespace-nowrap">{label}{arrow}</span>
+      <span className="whitespace-nowrap cursor-pointer hover:text-foreground">{label}{arrow}</span>
+      {/* Resize handle */}
+      <div
+        onMouseDown={onResizeStart}
+        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
+      />
     </TableHead>
   );
 }
