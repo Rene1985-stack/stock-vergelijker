@@ -21,15 +21,31 @@ interface Mapping {
   exactWarehouseName: string | null;
 }
 
+interface Division {
+  Code: number;
+  Description: string;
+  HID: string;
+}
+
 export default function Dashboard() {
   const [mappings, setMappings] = useState<Mapping[]>([]);
+  const [divisionNames, setDivisionNames] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/mappings")
-      .then((res) => res.json())
-      .then((data) => {
-        setMappings(Array.isArray(data) ? data : []);
+    Promise.all([
+      fetch("/api/mappings").then((res) => res.json()),
+      fetch("/api/exact/divisions").then((res) => res.json()).catch(() => []),
+    ])
+      .then(([mappingsData, divisionsData]) => {
+        setMappings(Array.isArray(mappingsData) ? mappingsData : []);
+        if (Array.isArray(divisionsData)) {
+          const names: Record<number, string> = {};
+          divisionsData.forEach((d: Division) => {
+            names[d.Code] = d.Description;
+          });
+          setDivisionNames(names);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -78,8 +94,9 @@ export default function Dashboard() {
               </CardTitle>
               <CardDescription>
                 Exact: {mapping.exactWarehouseCode} – {mapping.exactWarehouseName || "?"}
-                <Badge variant="outline" className="ml-2">
-                  Div. {mapping.exactDivision}
+                <br />
+                <Badge variant="outline" className="mt-1">
+                  {divisionNames[mapping.exactDivision] || `Div. ${mapping.exactDivision}`}
                 </Badge>
               </CardDescription>
             </CardHeader>

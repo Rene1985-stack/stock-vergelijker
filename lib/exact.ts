@@ -397,6 +397,25 @@ export async function getWarehouses(division: number): Promise<ExactWarehouse[]>
   return result.data;
 }
 
+export interface ExactDivision {
+  Code: number;
+  Description: string;
+  HID: string; // Administration code (1, 6, 22000 etc.)
+}
+
+export async function getDivisions(): Promise<ExactDivision[]> {
+  // Use any known division to call the API — it returns ALL divisions the account has access to
+  const token = await getStoredToken();
+  if (!token) throw new Error("Not connected to Exact Online.");
+
+  // Get any valid division from the token or use the first available
+  const result = await exactFetchAll<ExactDivision>(
+    token.division,
+    `/hrm/Divisions?$select=Code,Description,HID&$filter=Status eq 0`
+  );
+  return result.data;
+}
+
 export async function getCurrentDivision(accessToken: string): Promise<number> {
   const res = await fetch(
     `${EXACT_BASE_URL}/api/v1/current/Me?$select=CurrentDivision`,

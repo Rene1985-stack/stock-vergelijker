@@ -28,8 +28,15 @@ interface Mapping {
   exactWarehouseName: string | null;
 }
 
+interface Division {
+  Code: number;
+  Description: string;
+  HID: string;
+}
+
 export default function MappingPage() {
   const [mappings, setMappings] = useState<Mapping[]>([]);
+  const [divisionNames, setDivisionNames] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
 
   // Form state
@@ -39,6 +46,21 @@ export default function MappingPage() {
   const [exactWarehouseCode, setExactWarehouseCode] = useState("");
   const [exactWarehouseName, setExactWarehouseName] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const fetchDivisions = () => {
+    fetch("/api/exact/divisions")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const names: Record<number, string> = {};
+          data.forEach((d: Division) => {
+            names[d.Code] = d.Description;
+          });
+          setDivisionNames(names);
+        }
+      })
+      .catch(() => {});
+  };
 
   const fetchMappings = () => {
     fetch("/api/mappings")
@@ -52,6 +74,7 @@ export default function MappingPage() {
 
   useEffect(() => {
     fetchMappings();
+    fetchDivisions();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -186,7 +209,10 @@ export default function MappingPage() {
                     {m.picqerWarehouseName || "Onbekend"} - Picqer ID: {m.picqerWarehouseId}
                   </TableCell>
                   <TableCell>
-                    {m.exactWarehouseName || "Onbekend"} - {m.exactDivision} - Exact Code: {m.exactWarehouseCode}
+                    {m.exactWarehouseCode} – {m.exactWarehouseName || "Onbekend"}
+                    <span className="text-muted-foreground ml-2">
+                      ({divisionNames[m.exactDivision] || `Div. ${m.exactDivision}`})
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Button

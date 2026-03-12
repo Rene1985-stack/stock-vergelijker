@@ -35,6 +35,12 @@ interface ComparisonRow {
   hasDifference: boolean;
 }
 
+interface Division {
+  Code: number;
+  Description: string;
+  HID: string;
+}
+
 interface ComparisonResult {
   mapping: {
     id: number;
@@ -160,6 +166,23 @@ function VergelijkingPage() {
   const [sortKey, setSortKey] = useState<SortKey>("stockDiff");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const abortRef = useRef(false);
+  const [divisionNames, setDivisionNames] = useState<Record<number, string>>({});
+
+  // Fetch division names once
+  useEffect(() => {
+    fetch("/api/exact/divisions")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const names: Record<number, string> = {};
+          data.forEach((d: Division) => {
+            names[d.Code] = d.Description;
+          });
+          setDivisionNames(names);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Sync + Compare flow ────────────────────────
   const startFlow = useCallback(
@@ -400,8 +423,8 @@ function VergelijkingPage() {
           {data && (
             <p className="text-muted-foreground">
               Picqer: {data.mapping.picqerWarehouseName} → Exact:{" "}
-              {data.mapping.exactWarehouseCode} – {data.mapping.exactWarehouseName} (Div.{" "}
-              {data.mapping.exactDivision})
+              {data.mapping.exactWarehouseCode} – {data.mapping.exactWarehouseName}
+              {" "}({divisionNames[data.mapping.exactDivision] || `Div. ${data.mapping.exactDivision}`})
               {data.fromCache && (
                 <Badge variant="outline" className="ml-2">
                   Cache
