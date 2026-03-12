@@ -103,6 +103,7 @@ function SortableHead({
   currentDir,
   onSort,
   className,
+  rowSpan,
 }: {
   label: string;
   sortKey: SortKey;
@@ -110,6 +111,7 @@ function SortableHead({
   currentDir: SortDir;
   onSort: (key: SortKey) => void;
   className?: string;
+  rowSpan?: number;
 }) {
   const active = currentKey === sortKey;
   const arrow = active ? (currentDir === "asc" ? " \u25B2" : " \u25BC") : "";
@@ -117,6 +119,7 @@ function SortableHead({
     <TableHead
       className={`cursor-pointer select-none hover:bg-muted/50 ${className ?? ""}`}
       onClick={() => onSort(sortKey)}
+      rowSpan={rowSpan}
     >
       {label}
       {arrow}
@@ -318,8 +321,6 @@ function VergelijkingPage() {
       let cmp: number;
       if (sortKey === "sku" || sortKey === "productName") {
         cmp = (a[sortKey] ?? "").localeCompare(b[sortKey] ?? "", "nl");
-      } else if (sortKey === "stockDiff" || sortKey === "incomingDiff") {
-        cmp = Math.abs(a[sortKey]) - Math.abs(b[sortKey]);
       } else {
         cmp = (a[sortKey] ?? 0) - (b[sortKey] ?? 0);
       }
@@ -549,12 +550,24 @@ function VergelijkingPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead rowSpan={2} className="align-bottom">
-                    SKU
-                  </TableHead>
-                  <TableHead rowSpan={2} className="align-bottom">
-                    Product
-                  </TableHead>
+                  <SortableHead
+                    label="SKU"
+                    sortKey="sku"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className="align-bottom"
+                    rowSpan={2}
+                  />
+                  <SortableHead
+                    label="Product"
+                    sortKey="productName"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className="align-bottom"
+                    rowSpan={2}
+                  />
                   <TableHead
                     colSpan={3}
                     className="text-center border-l bg-blue-50"
