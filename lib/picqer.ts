@@ -95,6 +95,51 @@ export async function getPurchaseOrders(
   );
 }
 
+// ── Product types ────────────────────────────────
+
+export interface PicqerProductType {
+  idproducttype: number;
+  name: string;
+}
+
+export interface PicqerProduct {
+  idproduct: number;
+  productcode: string;
+  name: string;
+  type: string; // "normal" | "virtual" | "set"
+  idproducttype: number | null;
+}
+
+export async function getProductTypes(): Promise<PicqerProductType[]> {
+  return picqerFetchAll<PicqerProductType>("/producttypes");
+}
+
+/**
+ * Fetch all products and build a map of productcode → product type name.
+ * Fetches product types list first, then all products, and joins them.
+ */
+export async function getProductTypeMap(): Promise<Map<string, string>> {
+  const [productTypes, products] = await Promise.all([
+    getProductTypes(),
+    picqerFetchAll<PicqerProduct>("/products"),
+  ]);
+
+  // Build type ID → name lookup
+  const typeNames = new Map<number, string>();
+  for (const pt of productTypes) {
+    typeNames.set(pt.idproducttype, pt.name);
+  }
+
+  // Build productcode → type name
+  const result = new Map<string, string>();
+  for (const p of products) {
+    const typeName = p.idproducttype ? typeNames.get(p.idproducttype) ?? "" : "";
+    result.set(p.productcode, typeName);
+  }
+
+  return result;
+}
+
 // Aggregate incoming stock per productcode from purchase orders
 export function aggregateIncoming(
   purchaseOrders: PicqerPurchaseOrder[]

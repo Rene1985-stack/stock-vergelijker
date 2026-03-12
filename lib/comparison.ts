@@ -2,6 +2,7 @@ import {
   getWarehouseStock,
   getPurchaseOrders,
   aggregateIncoming,
+  getProductTypeMap,
 } from "./picqer";
 import { getDb } from "./db";
 import { warehouseMappings } from "@/db/schema";
@@ -12,6 +13,7 @@ import type { WarehouseMapping } from "@/db/schema";
 export interface ComparisonRow {
   sku: string;
   productName: string;
+  productType: string;
   picqerStock: number;
   picqerReserved: number;
   picqerIncoming: number;
@@ -93,9 +95,10 @@ export async function getComparison(
   }));
 
   // Fetch fresh Picqer data (fast: 500 req/min, 100 items/page)
-  const [picqerStock, picqerPOs] = await Promise.all([
+  const [picqerStock, picqerPOs, productTypeMap] = await Promise.all([
     getWarehouseStock(mapping.picqerWarehouseId),
     getPurchaseOrders(mapping.picqerWarehouseId),
+    getProductTypeMap(),
   ]);
 
   // Aggregate Picqer incoming from purchase orders
@@ -141,6 +144,7 @@ export async function getComparison(
     rows.push({
       sku,
       productName: exact?.ItemDescription || "",
+      productType: productTypeMap.get(sku) ?? "",
       picqerStock: pStock,
       picqerReserved: pReserved,
       picqerIncoming: pIncoming,

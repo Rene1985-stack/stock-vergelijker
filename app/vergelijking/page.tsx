@@ -23,6 +23,7 @@ import {
 interface ComparisonRow {
   sku: string;
   productName: string;
+  productType: string;
   picqerStock: number;
   picqerReserved: number;
   picqerIncoming: number;
@@ -74,6 +75,7 @@ type Phase = "idle" | "syncing" | "rate_limited" | "comparing" | "done" | "error
 type SortKey =
   | "sku"
   | "productName"
+  | "productType"
   | "picqerStock"
   | "exactStock"
   | "stockDiff"
@@ -302,7 +304,7 @@ function VergelijkingPage() {
       } else {
         setSortKey(key);
         setSortDir(
-          key === "sku" || key === "productName" ? "asc" : "desc"
+          key === "sku" || key === "productName" || key === "productType" ? "asc" : "desc"
         );
       }
     },
@@ -339,14 +341,15 @@ function VergelijkingPage() {
       rows = rows.filter(
         (r) =>
           r.sku.toLowerCase().includes(q) ||
-          r.productName.toLowerCase().includes(q)
+          r.productName.toLowerCase().includes(q) ||
+          r.productType.toLowerCase().includes(q)
       );
     }
 
     const dir = sortDir === "asc" ? 1 : -1;
     rows = [...rows].sort((a, b) => {
       let cmp: number;
-      if (sortKey === "sku" || sortKey === "productName") {
+      if (sortKey === "sku" || sortKey === "productName" || sortKey === "productType") {
         cmp = (a[sortKey] ?? "").localeCompare(b[sortKey] ?? "", "nl");
       } else {
         cmp = (a[sortKey] ?? 0) - (b[sortKey] ?? 0);
@@ -403,6 +406,7 @@ function VergelijkingPage() {
     const headers = [
       "SKU",
       "Productnaam",
+      "Product Type",
       "Picqer Voorraad",
       `${exactLabel} Voorraad`,
       "Verschil Voorraad",
@@ -420,6 +424,7 @@ function VergelijkingPage() {
         [
           r.sku,
           `"${r.productName.replace(/"/g, '""')}"`,
+          `"${(r.productType || "").replace(/"/g, '""')}"`,
           r.picqerStock,
           r.exactStock,
           r.stockDiff,
@@ -650,6 +655,15 @@ function VergelijkingPage() {
                     className="align-bottom"
                     rowSpan={2}
                   />
+                  <SortableHead
+                    label="Type"
+                    sortKey="productType"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className="align-bottom"
+                    rowSpan={2}
+                  />
                   <TableHead
                     colSpan={3}
                     className="text-center border-l bg-blue-50"
@@ -757,6 +771,9 @@ function VergelijkingPage() {
                     <TableCell className="max-w-[200px] truncate text-sm">
                       {row.productName}
                     </TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
+                      {row.productType}
+                    </TableCell>
                     <TableCell className="text-center border-l">
                       {fmt(row.picqerStock)}
                     </TableCell>
@@ -793,7 +810,7 @@ function VergelijkingPage() {
                 {filteredRows.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={12}
+                      colSpan={13}
                       className="text-center py-8 text-muted-foreground"
                     >
                       Geen resultaten gevonden.
