@@ -2,7 +2,7 @@ import {
   getWarehouseStock,
   getPurchaseOrders,
   aggregateIncoming,
-  getProductTypeMap,
+  getProductInfoMap,
 } from "./picqer";
 import { getDb } from "./db";
 import { warehouseMappings } from "@/db/schema";
@@ -14,6 +14,7 @@ export interface ComparisonRow {
   sku: string;
   productName: string;
   productType: string;
+  costprice: number;
   picqerStock: number;
   picqerReserved: number;
   picqerIncoming: number;
@@ -23,6 +24,7 @@ export interface ComparisonRow {
   stockDiff: number;
   incomingDiff: number;
   outgoingDiff: number;
+  stockImpact: number;
   hasDifference: boolean;
 }
 
@@ -95,10 +97,10 @@ export async function getComparison(
   }));
 
   // Fetch fresh Picqer data (fast: 500 req/min, 100 items/page)
-  const [picqerStock, picqerPOs, productTypeMap] = await Promise.all([
+  const [picqerStock, picqerPOs, productInfoMap] = await Promise.all([
     getWarehouseStock(mapping.picqerWarehouseId),
     getPurchaseOrders(mapping.picqerWarehouseId),
-    getProductTypeMap(),
+    getProductInfoMap(),
   ]);
 
   // Aggregate Picqer incoming from purchase orders
@@ -140,11 +142,14 @@ export async function getComparison(
     const stockDiff = pStock - eStock;
     const incomingDiff = pIncoming - ePlannedIn;
     const outgoingDiff = pReserved - ePlannedOut;
+    const info = productInfoMap.get(sku);
+    const costprice = info?.costprice ?? 0;
 
     rows.push({
       sku,
       productName: exact?.ItemDescription || "",
-      productType: productTypeMap.get(sku) ?? "",
+      productType: info?.type ?? "",
+      costprice,
       picqerStock: pStock,
       picqerReserved: pReserved,
       picqerIncoming: pIncoming,
@@ -154,6 +159,7 @@ export async function getComparison(
       stockDiff,
       incomingDiff,
       outgoingDiff,
+      stockImpact: Math.round(stockDiff * costprice * 100) / 100,
       hasDifference: stockDiff !== 0 || incomingDiff !== 0,
     });
   }

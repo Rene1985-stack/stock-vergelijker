@@ -103,18 +103,26 @@ export interface PicqerProduct {
   name: string;
   type: string; // "normal" | "unlimited_stock" | "virtual_composition" | "composition_with_stock"
   tags: string[];
+  fixedstockprice: number; // cost price in Picqer
+}
+
+export interface ProductInfo {
+  type: string;
+  costprice: number;
 }
 
 /**
- * Fetch all products and build a map of productcode → type.
- * Uses the built-in `type` field from Picqer products.
+ * Fetch all products and build a map of productcode → { type, costprice }.
  */
-export async function getProductTypeMap(): Promise<Map<string, string>> {
+export async function getProductInfoMap(): Promise<Map<string, ProductInfo>> {
   const products = await picqerFetchAll<PicqerProduct>("/products");
 
-  const result = new Map<string, string>();
+  const result = new Map<string, ProductInfo>();
   for (const p of products) {
-    result.set(p.productcode, p.type || "");
+    result.set(p.productcode, {
+      type: p.type || "",
+      costprice: p.fixedstockprice || 0,
+    });
   }
 
   return result;

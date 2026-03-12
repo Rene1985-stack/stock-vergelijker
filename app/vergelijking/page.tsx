@@ -24,6 +24,7 @@ interface ComparisonRow {
   sku: string;
   productName: string;
   productType: string;
+  costprice: number;
   picqerStock: number;
   picqerReserved: number;
   picqerIncoming: number;
@@ -33,6 +34,7 @@ interface ComparisonRow {
   stockDiff: number;
   incomingDiff: number;
   outgoingDiff: number;
+  stockImpact: number;
   hasDifference: boolean;
 }
 
@@ -76,9 +78,11 @@ type SortKey =
   | "sku"
   | "productName"
   | "productType"
+  | "costprice"
   | "picqerStock"
   | "exactStock"
   | "stockDiff"
+  | "stockImpact"
   | "picqerIncoming"
   | "exactPlannedIn"
   | "incomingDiff"
@@ -93,6 +97,11 @@ const MAX_STOCK = 100_000;
 /** Format number with Dutch thousand separators (dots) */
 function fmt(n: number): string {
   return n.toLocaleString("nl-NL");
+}
+
+/** Format currency with Dutch formatting (€ 1.234,56) */
+function fmtEuro(n: number): string {
+  return n.toLocaleString("nl-NL", { style: "currency", currency: "EUR" });
 }
 
 function DiffCell({ value }: { value: number }) {
@@ -393,7 +402,7 @@ function VergelijkingPage() {
   // Totals for filtered rows
   const totals = useMemo(() => {
     const t = {
-      picqerStock: 0, exactStock: 0, stockDiff: 0,
+      picqerStock: 0, exactStock: 0, stockDiff: 0, stockImpact: 0,
       picqerIncoming: 0, exactPlannedIn: 0, incomingDiff: 0,
       picqerReserved: 0, exactPlannedOut: 0, outgoingDiff: 0,
     };
@@ -401,6 +410,7 @@ function VergelijkingPage() {
       t.picqerStock += r.picqerStock;
       t.exactStock += r.exactStock;
       t.stockDiff += r.stockDiff;
+      t.stockImpact += r.stockImpact;
       t.picqerIncoming += r.picqerIncoming;
       t.exactPlannedIn += r.exactPlannedIn;
       t.incomingDiff += r.incomingDiff;
@@ -458,9 +468,11 @@ function VergelijkingPage() {
       "SKU",
       "Productnaam",
       "Product Type",
+      "Kostprijs",
       "Picqer Voorraad",
       `${exactLabel} Voorraad`,
       "Verschil Voorraad",
+      "Impact €",
       "Picqer Inkomend",
       `${exactLabel} Inkomend`,
       "Verschil Inkomend",
@@ -476,9 +488,11 @@ function VergelijkingPage() {
           r.sku,
           `"${r.productName.replace(/"/g, '""')}"`,
           `"${(r.productType || "").replace(/"/g, '""')}"`,
+          r.costprice.toFixed(2).replace(".", ","),
           r.picqerStock,
           r.exactStock,
           r.stockDiff,
+          r.stockImpact.toFixed(2).replace(".", ","),
           r.picqerIncoming,
           r.exactPlannedIn,
           r.incomingDiff,
@@ -774,8 +788,17 @@ function VergelijkingPage() {
                     className="align-bottom"
                     rowSpan={2}
                   />
+                  <SortableHead
+                    label="Kostprijs"
+                    sortKey="costprice"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className="align-bottom"
+                    rowSpan={2}
+                  />
                   <TableHead
-                    colSpan={3}
+                    colSpan={4}
                     className="text-center border-l bg-blue-50"
                   >
                     Voorraad
@@ -814,6 +837,14 @@ function VergelijkingPage() {
                   <SortableHead
                     label="Verschil"
                     sortKey="stockDiff"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-blue-50`}
+                  />
+                  <SortableHead
+                    label="Impact €"
+                    sortKey="stockImpact"
                     currentKey={sortKey}
                     currentDir={sortDir}
                     onSort={handleSort}
@@ -876,10 +907,14 @@ function VergelijkingPage() {
                     <TableCell className="text-sm">Totaal</TableCell>
                     <TableCell />
                     <TableCell />
+                    <TableCell />
                     <TableCell className="text-center border-l">{fmt(totals.picqerStock)}</TableCell>
                     <TableCell className="text-center">{fmt(totals.exactStock)}</TableCell>
                     <TableCell className={`text-center ${totals.stockDiff === 0 ? "text-green-600" : totals.stockDiff > 0 ? "text-red-600" : "text-orange-600"}`}>
                       {totals.stockDiff > 0 ? `+${fmt(totals.stockDiff)}` : fmt(totals.stockDiff)}
+                    </TableCell>
+                    <TableCell className={`text-center ${totals.stockImpact === 0 ? "text-green-600" : totals.stockImpact > 0 ? "text-red-600" : "text-orange-600"}`}>
+                      {fmtEuro(totals.stockImpact)}
                     </TableCell>
                     <TableCell className="text-center border-l">{fmt(totals.picqerIncoming)}</TableCell>
                     <TableCell className="text-center">{fmt(totals.exactPlannedIn)}</TableCell>
@@ -908,6 +943,9 @@ function VergelijkingPage() {
                     <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
                       {row.productType}
                     </TableCell>
+                    <TableCell className="text-right text-sm text-muted-foreground">
+                      {row.costprice ? fmtEuro(row.costprice) : "–"}
+                    </TableCell>
                     <TableCell className="text-center border-l">
                       {fmt(row.picqerStock)}
                     </TableCell>
@@ -915,6 +953,11 @@ function VergelijkingPage() {
                       {fmt(row.exactStock)}
                     </TableCell>
                     <DiffCell value={row.stockDiff} />
+                    <TableCell
+                      className={`text-center text-sm ${row.stockImpact === 0 ? "text-green-600" : row.stockImpact > 0 ? "text-red-600" : "text-orange-600"}`}
+                    >
+                      {row.stockImpact !== 0 ? fmtEuro(row.stockImpact) : "–"}
+                    </TableCell>
                     <TableCell className="text-center border-l">
                       {fmt(row.picqerIncoming)}
                     </TableCell>
@@ -944,7 +987,7 @@ function VergelijkingPage() {
                 {filteredRows.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={13}
+                      colSpan={15}
                       className="text-center py-8 text-muted-foreground"
                     >
                       Geen resultaten gevonden.
