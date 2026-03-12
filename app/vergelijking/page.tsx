@@ -72,7 +72,10 @@ type SortKey =
   | "stockDiff"
   | "picqerIncoming"
   | "exactPlannedIn"
-  | "incomingDiff";
+  | "incomingDiff"
+  | "picqerReserved"
+  | "exactPlannedOut"
+  | "outgoingDiff";
 
 type SortDir = "asc" | "desc";
 
@@ -345,6 +348,9 @@ function VergelijkingPage() {
       "Picqer Inkomend",
       `${exactLabel} Inkomend`,
       "Verschil Inkomend",
+      "Picqer Uitgaand",
+      `${exactLabel} Uitgaand`,
+      "Verschil Uitgaand",
     ];
 
     const csvRows = [
@@ -359,6 +365,9 @@ function VergelijkingPage() {
           r.picqerIncoming,
           r.exactPlannedIn,
           r.incomingDiff,
+          r.picqerReserved,
+          r.exactPlannedOut,
+          r.outgoingDiff,
         ].join(";")
       ),
     ];
@@ -580,6 +589,12 @@ function VergelijkingPage() {
                   >
                     Inkomend
                   </TableHead>
+                  <TableHead
+                    colSpan={3}
+                    className="text-center border-l bg-purple-50"
+                  >
+                    Uitgaand
+                  </TableHead>
                 </TableRow>
                 <TableRow>
                   <SortableHead
@@ -630,6 +645,30 @@ function VergelijkingPage() {
                     onSort={handleSort}
                     className={`${sharedHeadCls} bg-green-50`}
                   />
+                  <SortableHead
+                    label="Picqer"
+                    sortKey="picqerReserved"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} border-l bg-purple-50`}
+                  />
+                  <SortableHead
+                    label="Exact"
+                    sortKey="exactPlannedOut"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-purple-50`}
+                  />
+                  <SortableHead
+                    label="Verschil"
+                    sortKey="outgoingDiff"
+                    currentKey={sortKey}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                    className={`${sharedHeadCls} bg-purple-50`}
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -658,12 +697,19 @@ function VergelijkingPage() {
                       {fmt(row.exactPlannedIn)}
                     </TableCell>
                     <DiffCell value={row.incomingDiff} />
+                    <TableCell className="text-center border-l">
+                      {fmt(row.picqerReserved)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {fmt(row.exactPlannedOut)}
+                    </TableCell>
+                    <DiffCell value={row.outgoingDiff} />
                   </TableRow>
                 ))}
                 {filteredRows.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={11}
                       className="text-center py-8 text-muted-foreground"
                     >
                       Geen resultaten gevonden.
