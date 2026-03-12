@@ -2,15 +2,10 @@
 
 import { Suspense, useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+// Card imports kept for sync/error states
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -167,7 +162,7 @@ function VergelijkingPage() {
   const mappingId = searchParams.get("mapping_id");
 
   const [phase, setPhase] = useState<Phase>("idle");
-  const [syncItems, setSyncItems] = useState(0);
+  const [, setSyncItems] = useState(0);
   const [syncMessage, setSyncMessage] = useState("");
   const [data, setData] = useState<ComparisonResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -525,30 +520,32 @@ function VergelijkingPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Voorraad Vergelijking</h1>
+      {/* Compact header row */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-bold">Voorraad Vergelijking</h1>
           {data && (
-            <p className="text-muted-foreground">
-              Picqer: {data.mapping.picqerWarehouseName} → Exact:{" "}
-              {data.mapping.exactWarehouseCode} – {data.mapping.exactWarehouseName}
+            <span className="text-xs text-muted-foreground">
+              {data.mapping.picqerWarehouseName} → {data.mapping.exactWarehouseCode} – {data.mapping.exactWarehouseName}
               {" "}({divisionNames[data.mapping.exactDivision] || `Div. ${data.mapping.exactDivision}`})
-              {data.fromCache && (
-                <Badge variant="outline" className="ml-2">
-                  Cache
-                </Badge>
-              )}
-            </p>
+            </span>
           )}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCsv} disabled={!data}>
-            Export CSV
+        <div className="flex items-center gap-2">
+          {data && (
+            <div className="flex items-center gap-3 mr-4 text-xs">
+              <span><strong>{fmt(data.totalSkus)}</strong> SKUs</span>
+              <span className="text-red-600"><strong>{fmt(data.skusWithDifference)}</strong> verschil</span>
+              {(data.excludedCount || 0) > 0 && (
+                <span className="text-muted-foreground">{fmt(data.excludedCount)} uitgesloten</span>
+              )}
+              <span className="text-muted-foreground">{new Date(data.fetchedAt).toLocaleTimeString("nl-NL")}</span>
+            </div>
+          )}
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!data}>
+            CSV
           </Button>
-          <Button
-            onClick={() => startFlow(true)}
-            disabled={isLoading}
-          >
+          <Button size="sm" onClick={() => startFlow(true)} disabled={isLoading}>
             {isLoading ? "Laden..." : "Vernieuw"}
           </Button>
         </div>
@@ -556,146 +553,71 @@ function VergelijkingPage() {
 
       {/* Sync progress */}
       {isLoading && (
-        <Card className="mb-4 border-blue-200 bg-blue-50">
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full flex-shrink-0" />
-              <div>
-                <p className="text-blue-800 font-medium">
-                  {phase === "syncing" && "Synchroniseren met Exact Online..."}
-                  {phase === "rate_limited" && "Even wachten op Exact Online..."}
-                  {phase === "comparing" && "Vergelijking berekenen..."}
-                </p>
-                <p className="text-blue-700 text-sm">{syncMessage}</p>
-                {syncItems > 0 && phase !== "comparing" && (
-                  <p className="text-blue-600 text-xs mt-1">
-                    {fmt(syncItems)} Exact Online artikelen opgehaald
-                  </p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="mb-2 px-3 py-2 rounded border border-blue-200 bg-blue-50 flex items-center gap-2 text-sm">
+          <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full flex-shrink-0" />
+          <span className="text-blue-800">
+            {phase === "syncing" && "Synchroniseren..."}
+            {phase === "rate_limited" && "Rate limit, even wachten..."}
+            {phase === "comparing" && "Vergelijking berekenen..."}
+          </span>
+          <span className="text-blue-600 text-xs">{syncMessage}</span>
+        </div>
       )}
 
       {/* Error */}
       {error && (
-        <Card className="mb-4 border-red-200 bg-red-50">
-          <CardContent className="pt-4">
-            <p className="text-red-700">{error}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => startFlow(true)}
-            >
-              Opnieuw proberen
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="mb-2 px-3 py-2 rounded border border-red-200 bg-red-50 flex items-center gap-2 text-sm">
+          <span className="text-red-700">{error}</span>
+          <Button variant="outline" size="sm" onClick={() => startFlow(true)}>
+            Opnieuw
+          </Button>
+        </div>
       )}
 
       {data && phase === "done" && (
         <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  Totaal SKUs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">{fmt(data.totalSkus)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  Met verschil
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-red-600">
-                  {fmt(data.skusWithDifference)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  Uitgesloten
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-muted-foreground">
-                  {fmt(data.excludedCount || 0)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  Opgehaald
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {new Date(data.fetchedAt).toLocaleTimeString("nl-NL")}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-4 mb-4 items-center">
+          {/* Filters — single compact row */}
+          <div className="flex flex-wrap gap-2 mb-2 items-center text-sm">
             <Input
-              placeholder="Zoek op SKU of productnaam..."
+              placeholder="Zoeken..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
+              className="h-7 w-48 text-xs"
             />
             <Button
               variant={showOnlyDiffs ? "default" : "outline"}
               onClick={() => setShowOnlyDiffs(!showOnlyDiffs)}
               size="sm"
+              className="h-7 text-xs px-2"
             >
-              Alleen verschillen ({fmt(data.skusWithDifference)})
+              Verschillen ({fmt(data.skusWithDifference)})
             </Button>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                Min. verschil:
-              </span>
-              <select
-                value={minDiff}
-                onChange={(e) => setMinDiff(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="0">Alle</option>
-                <option value="1">&ge; 1</option>
-                <option value="2">&ge; 2</option>
-                <option value="5">&ge; 5</option>
-                <option value="10">&ge; 10</option>
-                <option value="25">&ge; 25</option>
-                <option value="50">&ge; 50</option>
-                <option value="100">&ge; 100</option>
-              </select>
-            </div>
+            <select
+              value={minDiff}
+              onChange={(e) => setMinDiff(e.target.value)}
+              className="h-7 rounded border border-input bg-background px-2 text-xs"
+            >
+              <option value="0">Min: alle</option>
+              <option value="1">&ge; 1</option>
+              <option value="2">&ge; 2</option>
+              <option value="5">&ge; 5</option>
+              <option value="10">&ge; 10</option>
+              <option value="25">&ge; 25</option>
+              <option value="50">&ge; 50</option>
+              <option value="100">&ge; 100</option>
+            </select>
             {/* Type multi-select */}
             {availableTypes.length > 0 && (
               <div className="relative" ref={typeDropdownRef}>
                 <button
                   onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
-                  className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring flex items-center gap-1.5"
+                  className="h-7 rounded border border-input bg-background px-2 text-xs flex items-center gap-1"
                 >
-                  <span className="text-muted-foreground">Type:</span>
-                  {selectedTypes.size === 0
-                    ? "Alle"
-                    : `${selectedTypes.size} geselecteerd`}
-                  <span className="text-xs ml-1">▾</span>
+                  Type: {selectedTypes.size === 0 ? "alle" : `${selectedTypes.size}`}
+                  <span className="text-[10px]">▾</span>
                 </button>
                 {typeDropdownOpen && (
-                  <div className="absolute z-50 mt-1 bg-background border rounded-md shadow-lg p-2 min-w-[200px] max-h-[300px] overflow-auto">
+                  <div className="absolute z-50 mt-1 bg-background border rounded-md shadow-lg p-2 min-w-[180px] max-h-[300px] overflow-auto">
                     <button
                       onClick={() => setSelectedTypes(new Set())}
                       className="text-xs text-blue-600 hover:underline mb-1 block"
@@ -705,7 +627,7 @@ function VergelijkingPage() {
                     {availableTypes.map((t) => (
                       <label
                         key={t}
-                        className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer text-sm"
+                        className="flex items-center gap-2 py-0.5 px-1 hover:bg-muted/50 rounded cursor-pointer text-xs"
                       >
                         <input
                           type="checkbox"
@@ -727,7 +649,7 @@ function VergelijkingPage() {
                 )}
               </div>
             )}
-            <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+            <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={hideHighStock}
@@ -735,31 +657,29 @@ function VergelijkingPage() {
                 className="rounded border-gray-300"
               />
               <span className="text-muted-foreground whitespace-nowrap">
-                Verberg &gt;{fmt(MAX_STOCK)} voorraad
+                &gt;{fmt(MAX_STOCK)} verbergen
               </span>
             </label>
-            <span className="text-sm text-muted-foreground self-center">
-              {fmt(filteredRows.length)} resultaten
+            <span className="text-xs text-muted-foreground">
+              {fmt(filteredRows.length)} rijen
             </span>
-          </div>
-          {/* Table width slider */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Breedte:</span>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-xs text-muted-foreground">Breedte:</span>
             <input
               type="range"
               min={100}
               max={300}
               value={tableWidth}
               onChange={(e) => setTableWidth(Number(e.target.value))}
-              className="w-32 h-1 accent-blue-600"
+              className="w-20 h-1 accent-blue-600"
             />
             <span className="text-xs text-muted-foreground">{tableWidth}%</span>
           </div>
 
-          {/* Comparison table */}
-          <div className="border rounded-lg overflow-auto">
+          {/* Comparison table with sticky header */}
+          <div className="border rounded-lg overflow-auto" style={{ maxHeight: "calc(100vh - 140px)" }}>
             <Table style={{ minWidth: `${tableWidth}%` }}>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
                 <TableRow>
                   <SortableHead
                     label="SKU"
