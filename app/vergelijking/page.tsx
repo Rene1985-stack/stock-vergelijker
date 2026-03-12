@@ -170,6 +170,22 @@ function VergelijkingPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const abortRef = useRef(false);
   const [divisionNames, setDivisionNames] = useState<Record<number, string>>({});
+  const [tableWidth, setTableWidth] = useState(100); // percentage
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+
+  // Close type dropdown on outside click
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!typeDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(e.target as Node)) {
+        setTypeDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [typeDropdownOpen]);
 
   // Fetch division names once
   useEffect(() => {
@@ -311,6 +327,16 @@ function VergelijkingPage() {
     [sortKey]
   );
 
+  // Collect unique product types from data
+  const availableTypes = useMemo(() => {
+    if (!data) return [];
+    const types = new Set<string>();
+    for (const r of data.rows) {
+      if (r.productType) types.add(r.productType);
+    }
+    return Array.from(types).sort((a, b) => a.localeCompare(b, "nl"));
+  }, [data]);
+
   const filteredRows = useMemo(() => {
     if (!data) return [];
     let rows = data.rows;
@@ -336,6 +362,10 @@ function VergelijkingPage() {
       );
     }
 
+    if (selectedTypes.size > 0) {
+      rows = rows.filter((r) => selectedTypes.has(r.productType));
+    }
+
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -358,7 +388,7 @@ function VergelijkingPage() {
     });
 
     return rows;
-  }, [data, search, showOnlyDiffs, minDiff, hideHighStock, sortKey, sortDir]);
+  }, [data, search, showOnlyDiffs, minDiff, hideHighStock, selectedTypes, sortKey, sortDir]);
 
   // ── Exclude SKU ────────────────────────────────
   const [excludingSku, setExcludingSku] = useState<string | null>(null);
@@ -616,6 +646,52 @@ function VergelijkingPage() {
                 <option value="100">&ge; 100</option>
               </select>
             </div>
+            {/* Type multi-select */}
+            {availableTypes.length > 0 && (
+              <div className="relative" ref={typeDropdownRef}>
+                <button
+                  onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+                  className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring flex items-center gap-1.5"
+                >
+                  <span className="text-muted-foreground">Type:</span>
+                  {selectedTypes.size === 0
+                    ? "Alle"
+                    : `${selectedTypes.size} geselecteerd`}
+                  <span className="text-xs ml-1">▾</span>
+                </button>
+                {typeDropdownOpen && (
+                  <div className="absolute z-50 mt-1 bg-background border rounded-md shadow-lg p-2 min-w-[200px] max-h-[300px] overflow-auto">
+                    <button
+                      onClick={() => setSelectedTypes(new Set())}
+                      className="text-xs text-blue-600 hover:underline mb-1 block"
+                    >
+                      Alles wissen
+                    </button>
+                    {availableTypes.map((t) => (
+                      <label
+                        key={t}
+                        className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedTypes.has(t)}
+                          onChange={() => {
+                            setSelectedTypes((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(t)) next.delete(t);
+                              else next.add(t);
+                              return next;
+                            });
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        {t}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -631,10 +707,23 @@ function VergelijkingPage() {
               {fmt(filteredRows.length)} resultaten
             </span>
           </div>
+          {/* Table width slider */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Breedte:</span>
+            <input
+              type="range"
+              min={100}
+              max={250}
+              value={tableWidth}
+              onChange={(e) => setTableWidth(Number(e.target.value))}
+              className="w-32 h-1 accent-blue-600"
+            />
+            <span className="text-xs text-muted-foreground">{tableWidth}%</span>
+          </div>
 
           {/* Comparison table */}
           <div className="border rounded-lg overflow-auto">
-            <Table>
+            <Table style={{ minWidth: `${tableWidth}%` }}>
               <TableHeader>
                 <TableRow>
                   <SortableHead
