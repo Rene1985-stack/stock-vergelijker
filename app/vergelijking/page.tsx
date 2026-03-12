@@ -39,6 +39,8 @@ interface ComparisonResult {
   mapping: {
     id: number;
     picqerWarehouseName: string | null;
+    picqerWarehouseId: number;
+    exactWarehouseCode: string;
     exactWarehouseName: string | null;
     exactDivision: number;
   };
@@ -330,14 +332,17 @@ function VergelijkingPage() {
   const exportCsv = () => {
     if (!filteredRows.length) return;
 
+    const whCode = data?.mapping?.exactWarehouseCode ?? "";
+    const whName = data?.mapping?.exactWarehouseName ?? "";
+    const exactLabel = `Exact ${whCode} ${whName}`.trim();
     const headers = [
       "SKU",
       "Productnaam",
       "Picqer Voorraad",
-      "Exact Voorraad",
+      `${exactLabel} Voorraad`,
       "Verschil Voorraad",
       "Picqer Inkomend",
-      "Exact Inkomend",
+      `${exactLabel} Inkomend`,
       "Verschil Inkomend",
     ];
 
@@ -384,8 +389,8 @@ function VergelijkingPage() {
           <h1 className="text-2xl font-bold">Voorraad Vergelijking</h1>
           {data && (
             <p className="text-muted-foreground">
-              {data.mapping.picqerWarehouseName} vs{" "}
-              {data.mapping.exactWarehouseName} (Div.{" "}
+              Picqer: {data.mapping.picqerWarehouseName} → Exact:{" "}
+              {data.mapping.exactWarehouseCode} – {data.mapping.exactWarehouseName} (Div.{" "}
               {data.mapping.exactDivision})
               {data.fromCache && (
                 <Badge variant="outline" className="ml-2">

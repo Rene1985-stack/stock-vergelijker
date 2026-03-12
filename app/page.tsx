@@ -77,8 +77,7 @@ export default function Dashboard() {
                   `Picqer #${mapping.picqerWarehouseId}`}
               </CardTitle>
               <CardDescription>
-                {mapping.exactWarehouseName ||
-                  `Exact ${mapping.exactWarehouseCode}`}
+                Exact: {mapping.exactWarehouseCode} – {mapping.exactWarehouseName || "?"}
                 <Badge variant="outline" className="ml-2">
                   Div. {mapping.exactDivision}
                 </Badge>
