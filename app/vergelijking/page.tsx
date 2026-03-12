@@ -99,9 +99,9 @@ function fmt(n: number): string {
   return n.toLocaleString("nl-NL");
 }
 
-/** Format currency with Dutch formatting (€ 1.234,56) */
+/** Format currency with Dutch formatting, no decimals (€ 1.234) */
 function fmtEuro(n: number): string {
-  return n.toLocaleString("nl-NL", { style: "currency", currency: "EUR" });
+  return n.toLocaleString("nl-NL", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function DiffCell({ value }: { value: number }) {
@@ -179,7 +179,7 @@ function VergelijkingPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const abortRef = useRef(false);
   const [divisionNames, setDivisionNames] = useState<Record<number, string>>({});
-  const [tableWidth, setTableWidth] = useState(100); // percentage
+  const [tableWidth, setTableWidth] = useState(150); // percentage
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
 
@@ -488,11 +488,11 @@ function VergelijkingPage() {
           r.sku,
           `"${r.productName.replace(/"/g, '""')}"`,
           `"${(r.productType || "").replace(/"/g, '""')}"`,
-          r.costprice.toFixed(2).replace(".", ","),
+          Math.round(r.costprice),
           r.picqerStock,
           r.exactStock,
           r.stockDiff,
-          r.stockImpact.toFixed(2).replace(".", ","),
+          Math.round(r.stockImpact),
           r.picqerIncoming,
           r.exactPlannedIn,
           r.incomingDiff,
@@ -748,7 +748,7 @@ function VergelijkingPage() {
             <input
               type="range"
               min={100}
-              max={250}
+              max={300}
               value={tableWidth}
               onChange={(e) => setTableWidth(Number(e.target.value))}
               className="w-32 h-1 accent-blue-600"
@@ -943,7 +943,7 @@ function VergelijkingPage() {
                     <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
                       {row.productType}
                     </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
+                    <TableCell className="text-right text-sm text-muted-foreground whitespace-nowrap">
                       {row.costprice ? fmtEuro(row.costprice) : "–"}
                     </TableCell>
                     <TableCell className="text-center border-l">
