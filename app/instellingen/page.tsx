@@ -11,11 +11,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface TokenStatus {
   connected: boolean;
   division: number | null;
   updatedAt: string | null;
+}
+
+interface Exclusion {
+  id: number;
+  mapping_id: number;
+  sku: string;
+  created_at: string;
+}
+
+interface Mapping {
+  id: number;
+  picqerWarehouseName: string | null;
+  exactWarehouseCode: string;
+  exactWarehouseName: string | null;
+  exactDivision: number;
 }
 
 export default function InstellingenPageWrapper() {
@@ -35,6 +58,12 @@ function InstellingenPage() {
   const [loading, setLoading] = useState(true);
   const [picqerStatus, setPicqerStatus] = useState<"checking" | "ok" | "error">("checking");
   const [picqerError, setPicqerError] = useState<string | null>(null);
+
+  // Exclusions state
+  const [exclusions, setExclusions] = useState<Exclusion[]>([]);
+  const [mappings, setMappings] = useState<Mapping[]>([]);
+  const [exclusionsLoading, setExclusionsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/exact/token")
@@ -59,7 +88,46 @@ function InstellingenPage() {
         setPicqerError(err.message);
         setPicqerStatus("error");
       });
+
+    // Fetch exclusions and mappings
+    Promise.all([
+      fetch("/api/exclusions").then((res) => res.json()).catch(() => []),
+      fetch("/api/mappings").then((res) => res.json()).catch(() => []),
+    ]).then(([excls, maps]) => {
+      setExclusions(Array.isArray(excls) ? excls : []);
+      setMappings(Array.isArray(maps) ? maps : []);
+      setExclusionsLoading(false);
+    });
   }, []);
+
+  const getMappingLabel = (mappingId: number) => {
+    const m = mappings.find((m) => m.id === mappingId);
+    if (!m) return `Mapping #${mappingId}`;
+    return `${m.picqerWarehouseName || "?"} → ${m.exactWarehouseCode} ${m.exactWarehouseName || ""}`.trim();
+  };
+
+  const handleDeleteExclusion = async (exclusion: Exclusion) => {
+    setDeletingId(exclusion.id);
+    try {
+      const res = await fetch("/api/exclusions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: exclusion.id }),
+      });
+      if (res.ok) {
+        setExclusions((prev) => prev.filter((e) => e.id !== exclusion.id));
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Group exclusions by mapping_id
+  const exclusionsByMapping = exclusions.reduce<Record<number, Exclusion[]>>((acc, e) => {
+    if (!acc[e.mapping_id]) acc[e.mapping_id] = [];
+    acc[e.mapping_id].push(e);
+    return acc;
+  }, {});
 
   return (
     <div>
@@ -140,6 +208,70 @@ function InstellingenPage() {
                 </p>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Excluded SKUs */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Uitgesloten producten
+              <Badge variant="outline">{exclusions.length}</Badge>
+            </CardTitle>
+            <CardDescription>
+              Producten die uitgesloten zijn van de vergelijking. Per mapping apart instelbaar.
+              Uitsluiten kan direct vanuit de vergelijkingstabel via het ✕ knopje.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {exclusionsLoading ? (
+              <p className="text-sm text-muted-foreground">Laden...</p>
+            ) : exclusions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Geen uitgesloten producten. Gebruik het ✕ knopje in de vergelijkingstabel om producten uit te sluiten.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(exclusionsByMapping).map(([mappingIdStr, excls]) => (
+                  <div key={mappingIdStr}>
+                    <h4 className="text-sm font-medium mb-2">
+                      {getMappingLabel(parseInt(mappingIdStr, 10))}
+                    </h4>
+                    <div className="border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>SKU</TableHead>
+                            <TableHead>Toegevoegd</TableHead>
+                            <TableHead className="w-[80px]">Actie</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {excls.map((e) => (
+                            <TableRow key={e.id}>
+                              <TableCell className="font-mono text-sm">{e.sku}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {new Date(e.created_at).toLocaleDateString("nl-NL")}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={deletingId === e.id}
+                                  onClick={() => handleDeleteExclusion(e)}
+                                >
+                                  {deletingId === e.id ? "..." : "Herstel"}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -29,6 +29,7 @@ export interface ComparisonResult {
   rows: ComparisonRow[];
   totalSkus: number;
   skusWithDifference: number;
+  excludedCount: number;
   fetchedAt: Date;
   fromCache: boolean;
   exactComplete: boolean;
@@ -64,6 +65,18 @@ export async function getComparison(
     );
   }
 
+  // Read excluded SKUs for this mapping
+  let excludedSkus = new Set<string>();
+  try {
+    const excludedRows = await sql(
+      "SELECT sku FROM excluded_skus WHERE mapping_id = $1",
+      [mappingId]
+    );
+    excludedSkus = new Set(excludedRows.map((r) => r.sku as string));
+  } catch {
+    // Table may not exist yet — ignore
+  }
+
   // Read synced Exact stock data
   const exactRows = await sql(
     "SELECT * FROM exact_stock WHERE mapping_id = $1",
@@ -91,13 +104,17 @@ export async function getComparison(
   // Build Exact lookup by ItemCode
   const exactMap = new Map(exactData.map((item) => [item.ItemCode, item]));
 
-  // Collect all unique SKUs
+  // Collect all unique SKUs (excluding excluded ones)
   const allSkuSet = new Set<string>();
   for (const entry of picqerStock) {
-    allSkuSet.add(entry.productcode);
+    if (!excludedSkus.has(entry.productcode)) {
+      allSkuSet.add(entry.productcode);
+    }
   }
   for (const item of exactData) {
-    allSkuSet.add(item.ItemCode);
+    if (!excludedSkus.has(item.ItemCode)) {
+      allSkuSet.add(item.ItemCode);
+    }
   }
   const allSkus = Array.from(allSkuSet);
 
@@ -151,6 +168,7 @@ export async function getComparison(
     rows,
     totalSkus: rows.length,
     skusWithDifference: rows.filter((r) => r.hasDifference).length,
+    excludedCount: excludedSkus.size,
     fetchedAt: new Date(),
     fromCache: false,
     exactComplete: true,

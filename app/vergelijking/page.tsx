@@ -53,6 +53,7 @@ interface ComparisonResult {
   rows: ComparisonRow[];
   totalSkus: number;
   skusWithDifference: number;
+  excludedCount: number;
   fetchedAt: string;
   fromCache: boolean;
   exactComplete: boolean;
@@ -356,6 +357,43 @@ function VergelijkingPage() {
     return rows;
   }, [data, search, showOnlyDiffs, minDiff, hideHighStock, sortKey, sortDir]);
 
+  // ── Exclude SKU ────────────────────────────────
+  const [excludingSku, setExcludingSku] = useState<string | null>(null);
+
+  const handleExclude = useCallback(
+    async (sku: string) => {
+      if (!mappingId || !data) return;
+      setExcludingSku(sku);
+      try {
+        const res = await fetch("/api/exclusions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mappingId: parseInt(mappingId, 10),
+            skus: [sku],
+          }),
+        });
+        if (res.ok) {
+          // Remove from local data immediately
+          setData((prev) => {
+            if (!prev) return prev;
+            const newRows = prev.rows.filter((r) => r.sku !== sku);
+            return {
+              ...prev,
+              rows: newRows,
+              totalSkus: newRows.length,
+              skusWithDifference: newRows.filter((r) => r.hasDifference).length,
+              excludedCount: (prev.excludedCount || 0) + 1,
+            };
+          });
+        }
+      } finally {
+        setExcludingSku(null);
+      }
+    },
+    [mappingId, data]
+  );
+
   const exportCsv = () => {
     if (!filteredRows.length) return;
 
@@ -490,7 +528,7 @@ function VergelijkingPage() {
       {data && phase === "done" && (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
@@ -510,6 +548,18 @@ function VergelijkingPage() {
               <CardContent>
                 <p className="text-2xl font-bold text-red-600">
                   {fmt(data.skusWithDifference)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">
+                  Uitgesloten
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-muted-foreground">
+                  {fmt(data.excludedCount || 0)}
                 </p>
               </CardContent>
             </Card>
@@ -618,6 +668,7 @@ function VergelijkingPage() {
                   >
                     Uitgaand
                   </TableHead>
+                  <TableHead rowSpan={2} className="w-[40px] align-bottom" />
                 </TableRow>
                 <TableRow>
                   <SortableHead
@@ -727,12 +778,22 @@ function VergelijkingPage() {
                       {fmt(row.exactPlannedOut)}
                     </TableCell>
                     <DiffCell value={row.outgoingDiff} />
+                    <TableCell className="text-center p-1">
+                      <button
+                        onClick={() => handleExclude(row.sku)}
+                        disabled={excludingSku === row.sku}
+                        className="text-muted-foreground hover:text-red-600 transition-colors disabled:opacity-50 text-xs px-1"
+                        title={`${row.sku} uitsluiten van vergelijking`}
+                      >
+                        {excludingSku === row.sku ? "..." : "✕"}
+                      </button>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {filteredRows.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={11}
+                      colSpan={12}
                       className="text-center py-8 text-muted-foreground"
                     >
                       Geen resultaten gevonden.
