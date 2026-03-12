@@ -390,6 +390,27 @@ function VergelijkingPage() {
     return rows;
   }, [data, search, showOnlyDiffs, minDiff, hideHighStock, selectedTypes, sortKey, sortDir]);
 
+  // Totals for filtered rows
+  const totals = useMemo(() => {
+    const t = {
+      picqerStock: 0, exactStock: 0, stockDiff: 0,
+      picqerIncoming: 0, exactPlannedIn: 0, incomingDiff: 0,
+      picqerReserved: 0, exactPlannedOut: 0, outgoingDiff: 0,
+    };
+    for (const r of filteredRows) {
+      t.picqerStock += r.picqerStock;
+      t.exactStock += r.exactStock;
+      t.stockDiff += r.stockDiff;
+      t.picqerIncoming += r.picqerIncoming;
+      t.exactPlannedIn += r.exactPlannedIn;
+      t.incomingDiff += r.incomingDiff;
+      t.picqerReserved += r.picqerReserved;
+      t.exactPlannedOut += r.exactPlannedOut;
+      t.outgoingDiff += r.outgoingDiff;
+    }
+    return t;
+  }, [filteredRows]);
+
   // ── Exclude SKU ────────────────────────────────
   const [excludingSku, setExcludingSku] = useState<string | null>(null);
 
@@ -849,6 +870,30 @@ function VergelijkingPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {/* Totals row */}
+                {filteredRows.length > 0 && (
+                  <TableRow className="bg-muted/60 font-semibold border-b-2">
+                    <TableCell className="text-sm">Totaal</TableCell>
+                    <TableCell />
+                    <TableCell />
+                    <TableCell className="text-center border-l">{fmt(totals.picqerStock)}</TableCell>
+                    <TableCell className="text-center">{fmt(totals.exactStock)}</TableCell>
+                    <TableCell className={`text-center ${totals.stockDiff === 0 ? "text-green-600" : totals.stockDiff > 0 ? "text-red-600" : "text-orange-600"}`}>
+                      {totals.stockDiff > 0 ? `+${fmt(totals.stockDiff)}` : fmt(totals.stockDiff)}
+                    </TableCell>
+                    <TableCell className="text-center border-l">{fmt(totals.picqerIncoming)}</TableCell>
+                    <TableCell className="text-center">{fmt(totals.exactPlannedIn)}</TableCell>
+                    <TableCell className={`text-center ${totals.incomingDiff === 0 ? "text-green-600" : totals.incomingDiff > 0 ? "text-red-600" : "text-orange-600"}`}>
+                      {totals.incomingDiff > 0 ? `+${fmt(totals.incomingDiff)}` : fmt(totals.incomingDiff)}
+                    </TableCell>
+                    <TableCell className="text-center border-l">{fmt(totals.picqerReserved)}</TableCell>
+                    <TableCell className="text-center">{fmt(totals.exactPlannedOut)}</TableCell>
+                    <TableCell className={`text-center ${totals.outgoingDiff === 0 ? "text-green-600" : totals.outgoingDiff > 0 ? "text-red-600" : "text-orange-600"}`}>
+                      {totals.outgoingDiff > 0 ? `+${fmt(totals.outgoingDiff)}` : fmt(totals.outgoingDiff)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                )}
                 {filteredRows.map((row) => (
                   <TableRow
                     key={row.sku}
