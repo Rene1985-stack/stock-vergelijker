@@ -69,11 +69,44 @@ async function getStoredToken() {
   return rows[0] ?? null;
 }
 
+/**
+ * Refresh the access token using the refresh token.
+ * Uses a database-level lock (updated_at check) to prevent race conditions
+ * in serverless environments where multiple functions may try to refresh
+ * simultaneously. Exact Online refresh tokens are single-use — if two
+ * functions use the same refresh token, one succeeds and the other
+ * invalidates the chain, breaking all future refreshes.
+ */
 async function refreshAccessToken(): Promise<string> {
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(process.env.DATABASE_URL!);
+
   const token = await getStoredToken();
 
   if (!token?.refreshToken) {
     throw new Error("No refresh token found. Please reconnect to Exact Online.");
+  }
+
+  // Optimistic lock: try to claim the refresh by setting a lock timestamp.
+  // Only one function will succeed at "claiming" the refresh.
+  const lockResult = await sql(
+    `UPDATE exact_tokens
+     SET updated_at = NOW()
+     WHERE id = $1 AND updated_at = $2
+     RETURNING id`,
+    [token.id, token.updatedAt ? token.updatedAt.toISOString() : new Date(0).toISOString()]
+  );
+
+  if (lockResult.length === 0) {
+    // Another function is already refreshing. Wait briefly and read the new token.
+    console.log("[Exact API] Token refresh already in progress, waiting...");
+    await sleep(2000);
+    const freshToken = await getStoredToken();
+    if (freshToken?.accessToken && freshToken.expiresAt && freshToken.expiresAt > new Date()) {
+      return freshToken.accessToken;
+    }
+    // If still no valid token after waiting, try refresh ourselves
+    // (the other function may have failed)
   }
 
   const res = await fetch(`${EXACT_BASE_URL}/api/oauth2/token`, {
@@ -93,10 +126,6 @@ async function refreshAccessToken(): Promise<string> {
   }
 
   const data = await res.json();
-
-  // Use raw SQL to avoid Drizzle DEFAULT keyword issues with Neon HTTP driver
-  const { neon } = await import("@neondatabase/serverless");
-  const sql = neon(process.env.DATABASE_URL!);
   const newExpiresAt = new Date(Date.now() + data.expires_in * 1000);
 
   await sql(
@@ -114,10 +143,8 @@ export async function getAccessToken(): Promise<string> {
     throw new Error("Not connected to Exact Online. Please connect first.");
   }
 
-  // Check if token is still valid.
-  // Use 5-minute buffer to account for timezone issues with
-  // timestamp without time zone columns (Drizzle may add local TZ offset)
-  if (token.accessToken && token.expiresAt && token.expiresAt > new Date(Date.now() + 5 * 60 * 1000)) {
+  // Check if token is still valid (2-minute buffer before expiry)
+  if (token.accessToken && token.expiresAt && token.expiresAt > new Date(Date.now() + 2 * 60 * 1000)) {
     return token.accessToken;
   }
 
