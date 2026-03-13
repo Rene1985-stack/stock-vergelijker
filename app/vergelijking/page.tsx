@@ -372,6 +372,15 @@ function VergelijkingPage() {
     return Array.from(types).sort((a, b) => a.localeCompare(b, "nl"));
   }, [data]);
 
+  // Default: select only "normal" when data first loads
+  const defaultTypeSet = useRef(false);
+  useEffect(() => {
+    if (data && !defaultTypeSet.current && availableTypes.includes("normal")) {
+      setSelectedTypes(new Set(["normal"]));
+      defaultTypeSet.current = true;
+    }
+  }, [data, availableTypes]);
+
   const filteredRows = useMemo(() => {
     if (!data) return [];
     let rows = data.rows;
