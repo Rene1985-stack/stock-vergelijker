@@ -217,6 +217,8 @@ export async function POST(request: NextRequest) {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
       },
     });
 
